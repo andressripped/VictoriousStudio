@@ -1,0 +1,10 @@
+{
+  "hosting": {
+    "public": "Victorious-Studio",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ]
+  }
+}

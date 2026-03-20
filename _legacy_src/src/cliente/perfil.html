@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mi Cuenta | Victorious Studio</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,300,0,0" rel="stylesheet">
+    
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    
+    <script src="../js/firebase-config.js"></script>
+    <script type="module" src="../components/menu.js"></script>
+    <script type="module" src="../components/auth.js"></script>
+    <script type="module" src="../components/perfil.js"></script>
+    <link rel="stylesheet" href="../styles/main.css">
+    <link rel="stylesheet" href="../components/ui.css">
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content" style="display:flex; align-items:center; justify-content:space-between;">
+            <div style="display:flex; align-items:center; gap:1rem;">
+                <button class="btn btn-ghost" onclick="window.location.href='../../index.html'">
+                    <span class="material-symbols-outlined">arrow_back</span>
+                </button>
+                <h1 style="font-family: var(--font-display); font-size: 1.25rem;">Mi Cuenta</h1>
+            </div>
+            <div id="auth-section" style="display:flex; align-items:center; gap:0.5rem;"></div>
+        </div>
+    </header>
+
+    <main class="container" style="padding-top: 100px; padding-bottom: 100px;">
+        
+        <section id="perfil-section"></section>
+                    <button class="btn btn-primary btn-block btn-sm" onclick="guardarPerfil()">Guardar cambios</button>
+                </div>
+
+                <div id="corte-gratis-banner" class="hidden" style="margin-top: 1rem; padding: 0.75rem; background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(16, 185, 129, 0.05) 100%); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: var(--radius-md);">
+                    <span class="material-symbols-outlined" style="color: var(--accent-success); vertical-align: middle;">card_giftcard</span>
+                    <span style="font-size: 0.875rem; font-weight: 600; color: var(--accent-success);"> ¡Tienes un corte GRATIS!</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Fidelización -->
+        <div class="loyalty-card" style="margin-bottom: 1.5rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                <div>
+                    <h3 style="font-family: var(--font-display); font-size: 1.125rem;">Programa Fidelidad</h3>
+                    <p style="font-size: 0.875rem; color: var(--text-muted);">10 cortes = 1 gratis</p>
+                </div>
+                <span style="font-size: 2rem;">✂️</span>
+            </div>
+            
+            <div class="loyalty-stamps" id="stamps-container"></div>
+            
+            <p style="text-align: center; margin-top: 1rem; font-size: 0.875rem; color: var(--text-muted);" id="loyalty-text"></p>
+        </div>
+        
+        <!-- Próximas citas -->
+        <h2 style="font-size: 1rem; font-weight: 600; margin-bottom: 1rem;">Mis Próximas Citas</h2>
+        <div id="proximas-citas" style="margin-bottom: 2rem;"></div>
+        
+        <!-- Historial -->
+        <h2 style="font-size: 1rem; font-weight: 600; margin-bottom: 1rem;">Historial</h2>
+        <div id="historial-citas"></div>
+        
+    </main>
+
+    <!-- Bottom CTA -->
+    <div class="bottom-nav" style="background: transparent; border: none; pointer-events: none;">
+        <div class="container" style="pointer-events: auto;">
+            <button class="btn btn-primary btn-block" onclick="window.location.href='reserva.html'" style="margin-bottom: 1rem;">
+                Agendar Nueva Cita
+            </button>
+        </div>
+    </div>
+
+    <script>
+        let currentUser = null;
+        
+        // actualizar header con avatar y menú desplegable
+        function updateHeaderAuth(user) {
+            const authSection = document.getElementById('auth-section');
+            if (!authSection) return;
+            if (user) {
+                authSection.innerHTML = `
+                    <div class="profile-container">
+                        <img src="${user.photoURL}" id="profile-avatar" class="profile-avatar" alt="Avatar">
+                        <div class="profile-menu" id="profile-menu">
+                            <a href="/perfil">Mi perfil</a>
+                            <a href="/configuraciones">Configuraciones</a>
+                            <a href="#" onclick="logout()">Cerrar sesión</a>
+                        </div>
+                    </div>
+                `;
+                window.initProfileMenu && window.initProfileMenu();
+            } else {
+                authSection.innerHTML = '';
+            }
+        }
+
+        firebase.auth().onAuthStateChanged(async (user) => {
+            if (!user) {
+                window.location.href = '../../index.html';
+                return;
+            }
+            currentUser = user;
+            updateHeaderAuth(user);
+            
+            document.getElementById('user-nombre').textContent = user.displayName;
+            document.getElementById('user-email').textContent = user.email;
+            document.getElementById('user-foto').src = user.photoURL;
+            // prefijar nombre en formulario de edición
+            const nombreInput = document.getElementById('input-nombre-perfil');
+            if (nombreInput) nombreInput.value = user.displayName || '';
+            
+            await cargarDatosCliente(user.uid);
+            await cargarCitas(user.uid);
+        });
+        
+        async function cargarDatosCliente(uid) {
+            const doc = await firebase.firestore().collection('clientes').doc(uid).get();
+            const data = doc.data();
+            
+            if (!data) return;
+            
+            // Mostrar mensaje personalizado si existe
+            if (data.prefs && data.prefs.mensaje) {
+                const msgBox = document.createElement('div');
+                msgBox.style.marginBottom = '1rem';
+                msgBox.style.padding = '1rem';
+                msgBox.style.background = 'var(--bg-tertiary)';
+                msgBox.style.border = '1px solid var(--border-subtle)';
+                msgBox.style.borderRadius = 'var(--radius-md)';
+                msgBox.textContent = data.prefs.mensaje;
+                document.querySelector('main.container').insertBefore(msgBox, document.querySelector('.card'));
+            }
+            
+            // Fidelización
+            const cortes = data.cortesCompletados || 0;
+            const progreso = cortes % 10;
+            
+            const stampsContainer = document.getElementById('stamps-container');
+            stampsContainer.innerHTML = '';
+            
+            for (let i = 0; i < 10; i++) {
+                const stamp = document.createElement('div');
+                stamp.className = `stamp ${i < progreso ? 'completed' : ''}`;
+                stamp.innerHTML = i < progreso ? '✓' : (i + 1);
+                stampsContainer.appendChild(stamp);
+            }
+            
+            const text = document.getElementById('loyalty-text');
+            if (data.tieneCorteGratis) {
+                document.getElementById('corte-gratis-banner').classList.remove('hidden');
+                text.innerHTML = '<span style="color: var(--accent-success); font-weight: 600;">¡Reclama tu corte gratis en tu próxima reserva!</span>';
+            } else {
+                const faltan = 10 - progreso;
+                text.textContent = `${faltan} cortes más para tu recompensa`;
+            }
+        }
+        
+        async function cargarCitas(uid) {
+            const ahora = new Date();
+            
+            // Próximas citas
+            const proximasSnap = await firebase.firestore()
+                .collection('citas')
+                .where('clienteId', '==', uid)
+                .where('fechaHora', '>=', ahora)
+                .where('estado', 'in', ['confirmado', 'pendiente_pago'])
+                .orderBy('fechaHora', 'asc')
+                .get();
+            
+            const proximasContainer = document.getElementById('proximas-citas');
+            
+            if (proximasSnap.empty) {
+                proximasContainer.innerHTML = `
+                    <div style="text-align: center; padding: 2rem; color: var(--text-muted);">
+                        <p>No tienes citas programadas</p>
+                        <button class="btn btn-primary btn-sm" style="margin-top: 1rem;" onclick="window.location.href='reserva.html'">
+                            Agendar ahora
+                        </button>
+                    </div>
+                `;
+            } else {
+                proximasContainer.innerHTML = '';
+                proximasSnap.forEach(doc => {
+                    proximasContainer.appendChild(crearCitaCard(doc.data(), doc.id, true));
+                });
+            }
+            
+            // Historial
+            const historialSnap = await firebase.firestore()
+                .collection('citas')
+                .where('clienteId', '==', uid)
+                .where('fechaHora', '<', ahora)
+                .orderBy('fechaHora', 'desc')
+                .limit(10)
+                .get();
+            
+            const historialContainer = document.getElementById('historial-citas');
+            
+            if (historialSnap.empty) {
+                historialContainer.innerHTML = '<p style="text-align: center; color: var(--text-muted); padding: 2rem;">Sin historial aún</p>';
+            } else {
+                historialContainer.innerHTML = '';
+                historialSnap.forEach(doc => {
+                    historialContainer.appendChild(crearCitaCard(doc.data(), doc.id, false));
+                });
+            }
+        }
+        
+        function crearCitaCard(cita, id, esProxima) {
+            const div = document.createElement('div');
+            div.className = 'card';
+            div.style.marginBottom = '1rem';
+            
+            const fecha = cita.fechaHora.toDate ? cita.fechaHora.toDate() : new Date(cita.fechaHora);
+            
+            const estadoClass = cita.estado === 'confirmado' ? 'badge-confirmado' : 
+                               cita.estado === 'completado' ? 'badge-confirmado' : 'badge-pendiente';
+            
+            div.innerHTML = `
+                <div style="padding: 1.25rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.75rem;">
+                        <div>
+                            <p style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.1em;">
+                                ${fecha.toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })}
+                            </p>
+                            <h4 style="font-size: 1.125rem; font-weight: 600; margin-top: 0.25rem;">${cita.hora}</h4>
+                        </div>
+                        <span class="badge ${estadoClass}">
+                            ${cita.estado === 'confirmado' ? 'Confirmado' : cita.estado === 'completado' ? 'Completado' : 'Pendiente'}
+                        </span>
+                    </div>
+                    
+                    <p style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.75rem;">
+                        ${cita.servicio.nombre}
+                    </p>
+                    
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 0.75rem; border-top: 1px solid var(--border-subtle);">
+                        <span style="font-size: 0.875rem; font-weight: 600;">
+                            ${window.firebaseApp.formatCOP(cita.precioFinal)}
+                        </span>
+                        <span style="font-size: 0.75rem; color: var(--text-muted);">
+                            ${cita.metodoPago === 'efectivo' ? 'Efectivo' : 'Nequi'}
+                        </span>
+                    </div>
+                    
+                    ${esProxima ? `
+                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.5rem; margin-top: 1rem;">
+                        <a href="https://wa.me/573125800522?text=Hola%20Victor,%20soy%20${encodeURIComponent(cita.clienteNombre)}%20y%20quiero%20modificar%20mi%20cita%20del%20${encodeURIComponent(cita.fecha)}%20a%20las%20${encodeURIComponent(cita.hora)}" 
+                           class="btn btn-secondary btn-sm" style="text-decoration: none; display: flex; align-items: center; justify-content: center;">
+                            <span class="material-symbols-outlined" style="font-size: 1rem; margin-right: 0.25rem;">edit</span>
+                            Modificar
+                        </a>
+                        <a href="https://wa.me/573125800522?text=Hola%20Victor,%20soy%20${encodeURIComponent(cita.clienteNombre)}%20y%20quiero%20cancelar%20mi%20cita%20del%20${encodeURIComponent(cita.fecha)}%20a%20las%20${encodeURIComponent(cita.hora)}" 
+                           class="btn btn-danger btn-sm" style="text-decoration: none; display: flex; align-items: center; justify-content: center;">
+                            <span class="material-symbols-outlined" style="font-size: 1rem; margin-right: 0.25rem;">close</span>
+                            Cancelar
+                        </a>
+                    </div>
+                    ` : ''}
+                </div>
+            `;
+            
+            return div;
+        }
+        
+        // toggle form visibility
+        function toggleEditPerfil() {
+            const form = document.getElementById('edit-perfil-form');
+            if (form) form.classList.toggle('hidden');
+        }
+
+        // preview selected profile photo
+        let fotoPerfilPendiente = null;
+        function handleFotoPerfilChange(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            if (!file.type.startsWith('image/')) {
+                alert('Selecciona una imagen válida');
+                return;
+            }
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                document.getElementById('preview-foto-perfil').src = e.target.result;
+                document.getElementById('preview-foto-perfil').classList.remove('hidden');
+            };
+            reader.readAsDataURL(file);
+            fotoPerfilPendiente = file;
+        }
+
+        async function guardarPerfil() {
+            const nuevoNombre = document.getElementById('input-nombre-perfil').value.trim();
+            const updates = {};
+            if (nuevoNombre && nuevoNombre !== currentUser.displayName) {
+                updates.displayName = nuevoNombre;
+            }
+            try {
+                if (fotoPerfilPendiente) {
+                    // subir foto usando helper
+                    const res = await window.firestoreHelper.guardarFotoPerfilBase64(fotoPerfilPendiente, currentUser.uid);
+                    if (res && res.base64) {
+                        updates.photoURL = res.base64;
+                    }
+                }
+                if (Object.keys(updates).length) {
+                    await currentUser.updateProfile(updates);
+                    // también actualizar documento de cliente
+                    await firebase.firestore().collection('clientes').doc(currentUser.uid).update({
+                        nombre: updates.displayName || currentUser.displayName,
+                        foto: updates.photoURL || currentUser.photoURL
+                    });
+                    // refrescar UI
+                    document.getElementById('user-nombre').textContent = currentUser.displayName;
+                    document.getElementById('user-foto').src = currentUser.photoURL;
+                    updateHeaderAuth(currentUser);
+                    alert('Perfil actualizado');
+                }
+                // ocultar formulario
+                document.getElementById('edit-perfil-form').classList.add('hidden');
+            } catch (error) {
+                console.error('Error guardando perfil:', error);
+                alert('Error al guardar perfil');
+            }
+        }
+
+        function logout() {
+            firebase.auth().signOut();
+        }
+    </script>
+</body>
+</html>

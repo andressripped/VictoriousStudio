@@ -1,0 +1,81 @@
+/* src/css/base.css */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    font-family: var(--font-body);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    /* Transición suave y persistente para el Theming Engine */
+    transition: background-color 0.4s ease, color 0.4s ease;
+}
+
+/* Trust Building Map Styling */
+.location-map {
+    filter: grayscale(100%) invert(90%) hue-rotate(180deg);
+    transition: filter 0.4s ease;
+}
+
+[data-theme="light"] .location-map {
+    filter: grayscale(100%);
+}
+
+h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-display);
+    color: var(--text-primary);
+    font-weight: 400; /* Elegancia clásica, no negrita gruesa */
+    letter-spacing: -0.02em;
+}
+
+h1 {
+    font-size: 4.5rem;
+    color: #ffffff;
+    line-height: 1.1;
+}
+
+h2 {
+    font-size: 3rem;
+    line-height: 1.2;
+}
+
+h3 {
+    font-size: 1.75rem;
+}
+
+a {
+    color: var(--accent-primary);
+    text-decoration: none;
+    transition: color 0.3s ease;
+}
+
+a:hover {
+    color: var(--accent-primary-hover);
+}
+
+img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+}
+
+/* Animations */
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes slideUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideUpToast {
+    from { opacity: 0; transform: translateY(100%); }
+    to { opacity: 1; transform: translateY(0); }
+}

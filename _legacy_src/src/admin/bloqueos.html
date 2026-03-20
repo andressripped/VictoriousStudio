@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bloquear Días | Victorious Studio</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,300,0,0" rel="stylesheet">
+    
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    
+    <script src="../js/firebase-config.js"></script>
+    <link rel="stylesheet" href="../styles/main.css">
+    
+    <style>
+        .calendar-admin {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 8px;
+        }
+        
+        .admin-day {
+            aspect-ratio: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            border-radius: var(--radius-md);
+            font-size: 0.875rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border: 1px solid transparent;
+            position: relative;
+        }
+        
+        .admin-day:hover:not(.past) {
+            background: var(--bg-hover);
+        }
+        
+        .admin-day.past {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+        
+        .admin-day.bloqueado {
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--accent-danger);
+            border-color: rgba(239, 68, 68, 0.3);
+        }
+        
+        .admin-day.con-citas {
+            background: rgba(245, 158, 11, 0.1);
+        }
+        
+        .admin-day.selected {
+            background: var(--accent-white);
+            color: var(--bg-primary);
+            font-weight: 700;
+        }
+        
+        .day-indicator {
+            position: absolute;
+            bottom: 4px;
+            width: 4px;
+            height: 4px;
+            border-radius: 50%;
+        }
+        
+        .indicator-citas { background: var(--accent-warning); }
+        .indicator-bloqueado { background: var(--accent-danger); }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <button class="btn btn-ghost" onclick="history.back()">
+                <span class="material-symbols-outlined">arrow_back</span>
+            </button>
+            <h1 style="font-family: var(--font-display); font-size: 1.25rem;">Bloquear Días</h1>
+            <button class="btn btn-ghost" onclick="logout()">
+                <span class="material-symbols-outlined">logout</span>
+            </button>
+        </div>
+    </header>
+
+    <main class="container" style="padding-top: 100px; padding-bottom: 100px;">
+        
+        <div class="card" style="margin-bottom: 1.5rem;">
+            <div style="padding: 1rem; border-bottom: 1px solid var(--border-subtle); display: flex; justify-content: space-between; align-items: center;">
+                <h3 id="mes-actual" style="font-size: 1rem; font-weight: 600;">Febrero 2024</h3>
+                <div style="display: flex; gap: 0.5rem;">
+                    <button class="btn btn-ghost btn-sm" onclick="cambiarMes(-1)">
+                        <span class="material-symbols-outlined">chevron_left</span>
+                    </button>
+                    <button class="btn btn-ghost btn-sm" onclick="cambiarMes(1)">
+                        <span class="material-symbols-outlined">chevron_right</span>
+                    </button>
+                </div>
+            </div>
+            
+            <div style="padding: 1rem;">
+                <div class="calendar-admin" id="dias-header" style="margin-bottom: 0.5rem;">
+                    <div style="text-align: center; font-size: 0.625rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">Lu</div>
+                    <div style="text-align: center; font-size: 0.625rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">Ma</div>
+                    <div style="text-align: center; font-size: 0.625rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">Mi</div>
+                    <div style="text-align: center; font-size: 0.625rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">Ju</div>
+                    <div style="text-align: center; font-size: 0.625rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">Vi</div>
+                    <div style="text-align: center; font-size: 0.625rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">Sa</div>
+                    <div style="text-align: center; font-size: 0.625rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">Do</div>
+                </div>
+                
+                <div class="calendar-admin" id="dias-grid"></div>
+            </div>
+        </div>
+        
+        <!-- Leyenda -->
+        <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem; font-size: 0.75rem;">
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <div style="width: 12px; height: 12px; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 4px;"></div>
+                <span style="color: var(--text-muted);">Disponible</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <div style="width: 12px; height: 12px; background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 4px;"></div>
+                <span style="color: var(--text-muted);">Con citas</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <div style="width: 12px; height: 12px; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 4px;"></div>
+                <span style="color: var(--text-muted);">Bloqueado</span>
+            </div>
+        </div>
+        
+        <!-- Info día seleccionado -->
+        <div id="info-dia" class="hidden">
+            <div class="card" style="background: var(--bg-tertiary);">
+                <div style="padding: 1.5rem;">
+                    <h3 style="font-size: 1rem; font-weight: 600; margin-bottom: 0.5rem;" id="info-fecha">Lunes, 12 de Febrero</h3>
+                    
+                    <div id="info-citas-existentes" class="hidden" style="margin-bottom: 1rem;">
+                        <p style="font-size: 0.875rem; color: var(--accent-warning); margin-bottom: 0.5rem;">
+                            <span class="material-symbols-outlined" style="font-size: 1rem; vertical-align: middle;">warning</span>
+                            Hay <strong id="count-citas">0 citas</strong> programadas este día
+                        </p>
+                        <div id="lista-citas-dia" style="font-size: 0.75rem; color: var(--text-muted);"></div>
+                    </div>
+                    
+                    <div id="acciones-dia">
+                        <button class="btn btn-danger btn-block" id="btn-bloquear" onclick="toggleBloqueo()">
+                            <span class="material-symbols-outlined">block</span>
+                            Bloquear este día
+                        </button>
+                        <button class="btn btn-success btn-block hidden" id="btn-desbloquear" onclick="toggleBloqueo()">
+                            <span class="material-symbols-outlined">check_circle</span>
+                            Desbloquear día
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+    </main>
+
+    <script>
+        let fechaActual = new Date();
+        let diaSeleccionado = null;
+        let bloqueos = new Map();
+        let citasPorDia = new Map();
+        
+        firebase.auth().onAuthStateChanged(async (user) => {
+            if (!user) {
+                window.location.href = '../../index.html';
+                return;
+            }
+            await cargarDatos();
+            renderCalendario();
+        });
+        
+        async function cargarDatos() {
+            // Cargar bloqueos existentes
+            const bloqueosSnap = await firebase.firestore()
+                .collection('bloqueos')
+                .get();
+            
+            bloqueosSnap.forEach(doc => {
+                const b = doc.data();
+                if (b && b.fecha) {
+                    bloqueos.set(b.fecha, { id: doc.id, ...b });
+                }
+            });
+            
+            // Cargar citas del mes actual y siguiente
+            const inicioMes = new Date(fechaActual.getFullYear(), fechaActual.getMonth(), 1);
+            const finMes = new Date(fechaActual.getFullYear(), fechaActual.getMonth() + 2, 0);
+            
+            const citasSnap = await firebase.firestore()
+                .collection('citas')
+                .where('fechaHora', '>=', inicioMes)
+                .where('fechaHora', '<=', finMes)
+                .where('estado', 'in', ['confirmado', 'pendiente_pago'])
+                .get();
+            
+            citasSnap.forEach(doc => {
+                const cita = doc.data();
+                const fecha = cita.fecha;
+                if (!citasPorDia.has(fecha)) {
+                    citasPorDia.set(fecha, []);
+                }
+                citasPorDia.get(fecha).push(cita);
+            });
+        }
+        
+        function renderCalendario() {
+            const year = fechaActual.getFullYear();
+            const month = fechaActual.getMonth();
+            
+            document.getElementById('mes-actual').textContent = 
+                new Date(year, month).toLocaleDateString('es-CO', { month: 'long', year: 'numeric' });
+            
+            const primerDia = new Date(year, month, 1).getDay();
+            const diasEnMes = new Date(year, month + 1, 0).getDate();
+            const hoy = new Date();
+            hoy.setHours(0, 0, 0, 0);
+            
+            const grid = document.getElementById('dias-grid');
+            grid.innerHTML = '';
+            
+            // Espacios vacíos
+            for (let i = 0; i < (primerDia === 0 ? 6 : primerDia - 1); i++) {
+                const empty = document.createElement('div');
+                empty.className = 'admin-day';
+                grid.appendChild(empty);
+            }
+            
+            // Días
+            for (let dia = 1; dia <= diasEnMes; dia++) {
+                const fecha = new Date(year, month, dia);
+                const fechaStr = fecha.toISOString().split('T')[0];
+                const btn = document.createElement('button');
+                btn.className = 'admin-day';
+                btn.innerHTML = `<span style="font-weight: 600;">${dia}</span>`;
+                
+                // Estados
+                if (fecha < hoy) {
+                    btn.classList.add('past');
+                } else {
+                    btn.onclick = () => selectDia(fecha, fechaStr, btn);
+                }
+                
+                if (bloqueos.has(fechaStr)) {
+                    btn.classList.add('bloqueado');
+                    btn.innerHTML += '<div class="day-indicator indicator-bloqueado"></div>';
+                }
+                
+                const citas = citasPorDia.get(fechaStr) || [];
+                if (citas.length > 0 && !bloqueos.has(fechaStr)) {
+                    btn.classList.add('con-citas');
+                    btn.innerHTML += `<div class="day-indicator indicator-citas"></div>`;
+                }
+                
+                if (diaSeleccionado && fechaStr === diaSeleccionado) {
+                    btn.classList.add('selected');
+                }
+                
+                grid.appendChild(btn);
+            }
+        }
+        
+        function cambiarMes(delta) {
+            fechaActual.setMonth(fechaActual.getMonth() + delta);
+            cargarDatos().then(() => renderCalendario());
+        }
+        
+        function selectDia(fecha, fechaStr, btnElement) {
+            // Quitar selección anterior
+            document.querySelectorAll('.admin-day.selected').forEach(el => {
+                el.classList.remove('selected');
+            });
+            btnElement.classList.add('selected');
+            
+            diaSeleccionado = fechaStr;
+            const infoDiv = document.getElementById('info-dia');
+            infoDiv.classList.remove('hidden');
+            
+            // Info
+            document.getElementById('info-fecha').textContent = 
+                fecha.toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' });
+            
+            // Citas existentes
+            const citas = citasPorDia.get(fechaStr) || [];
+            const citasDiv = document.getElementById('info-citas-existentes');
+            
+            if (citas.length > 0) {
+                citasDiv.classList.remove('hidden');
+                document.getElementById('count-citas').textContent = citas.length;
+                
+                const lista = citas.map(c => `${c.hora} - ${c.clienteNombre}`).join('<br>');
+                document.getElementById('lista-citas-dia').innerHTML = lista;
+            } else {
+                citasDiv.classList.add('hidden');
+            }
+            
+            // Botones
+            const estaBloqueado = bloqueos.has(fechaStr);
+            document.getElementById('btn-bloquear').classList.toggle('hidden', estaBloqueado);
+            document.getElementById('btn-desbloquear').classList.toggle('hidden', !estaBloqueado);
+        }
+        
+        async function toggleBloqueo() {
+            if (!diaSeleccionado) return;
+            
+            const info = bloqueos.get(diaSeleccionado);
+            const estaBloqueado = !!info;
+            
+            try {
+                if (estaBloqueado) {
+                    // Desbloquear usando el id correcto
+                    await firebase.firestore().collection('bloqueos').doc(info.id).delete();
+                    bloqueos.delete(diaSeleccionado);
+                    
+                    // Notificar a clientes si había citas (opcional)
+                    const citas = citasPorDia.get(diaSeleccionado) || [];
+                    if (citas.length > 0) {
+                        console.log('Día desbloqueado, citas reactivadas:', citas.length);
+                    }
+                    
+                } else {
+                    // Bloquear
+                    // Verificar si hay citas
+                    const citas = citasPorDia.get(diaSeleccionado) || [];
+                    if (citas.length > 0) {
+                        if (!confirm(`¡Atención! Hay ${citas.length} citas programadas este día. ¿Confirmas que quieres bloquearlo? Los clientes serán notificados.`)) {
+                            return;
+                        }
+                        
+                        // Cancelar citas existentes
+                        for (const cita of citas) {
+                            await firebase.firestore().collection('citas').doc(cita.id).update({
+                                estado: 'cancelada',
+                                motivoCancelacion: 'Día bloqueado por el barbero',
+                                canceladaEn: firebase.firestore.FieldValue.serverTimestamp()
+                            });
+                            
+                            // Notificar al cliente (implementar con Cloud Functions)
+                            console.log('Notificar cancelación a:', cita.clienteTelefono);
+                        }
+                    }
+                    
+                    const newDoc = await firebase.firestore().collection('bloqueos').add({
+                        fecha: diaSeleccionado,
+                        creadoEn: firebase.firestore.FieldValue.serverTimestamp(),
+                        motivo: 'No disponible'
+                    });
+                    bloqueos.set(diaSeleccionado, { id: newDoc.id, fecha: diaSeleccionado });
+                }
+                
+                renderCalendario();
+                selectDia(new Date(diaSeleccionado), diaSeleccionado, 
+                    document.querySelector('.admin-day.selected'));
+                
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error al actualizar. Intenta de nuevo.');
+            }
+        }
+        
+        function logout() {
+            firebase.auth().signOut();
+        }
+    </script>
+</body>
+</html>

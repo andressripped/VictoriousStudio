@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debugging - Panel Admin</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #1a1a1a;
+            color: #fff;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .container { max-width: 900px; margin: 0 auto; }
+        h1 { text-align: center; margin-bottom: 30px; color: #00ff88; }
+        .test-box {
+            background: #2a2a2a;
+            border: 2px solid #444;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 15px;
+            transition: all 0.3s;
+        }
+        .test-box.success { border-color: #00ff88; background: #1a3a1a; }
+        .test-box.error { border-color: #ff4444; background: #3a1a1a; }
+        .test-box.warning { border-color: #ffaa00; background: #3a2a1a; }
+        .test-title {
+            font-weight: bold;
+            font-size: 1.1rem;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .status-icon {
+            font-size: 1.5rem;
+            min-width: 30px;
+        }
+        .result {
+            background: #1a1a1a;
+            border-left: 3px solid #00ff88;
+            padding: 10px 15px;
+            border-radius: 4px;
+            margin: 10px 0;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+        }
+        .result.error { border-left-color: #ff4444; color: #ff8888; }
+        .result.warning { border-left-color: #ffaa00; color: #ffdd88; }
+        button {
+            background: #00ff88;
+            color: #000;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            margin: 5px;
+            transition: all 0.3s;
+        }
+        button:hover { background: #00dd66; transform: scale(1.05); }
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #444;
+            border-top-color: #00ff88;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .log-box {
+            background: #1a1a1a;
+            border: 1px solid #444;
+            border-radius: 4px;
+            padding: 15px;
+            margin-top: 10px;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 0.85rem;
+        }
+        .log-line {
+            padding: 5px 0;
+            border-bottom: 1px solid #333;
+        }
+        .summary {
+            background: #2a3a2a;
+            border: 2px solid #00ff88;
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 30px;
+            text-align: center;
+        }
+        .summary h3 { color: #00ff88; margin-bottom: 15px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 DEBUGGING - Panel Administrativo</h1>
+        
+        <!-- TEST 1 -->
+        <div class="test-box" id="test1">
+            <div class="test-title">
+                <span class="status-icon" id="icon1">⏳</span>
+                TEST 1: ¿Está cargado admin.js?
+            </div>
+            <div class="result" id="result1">Verificando...</div>
+            <button onclick="runTest(1)">🔄 Reintentar Test 1</button>
+        </div>
+
+        <!-- TEST 2 -->
+        <div class="test-box" id="test2">
+            <div class="test-title">
+                <span class="status-icon" id="icon2">⏳</span>
+                TEST 2: ¿Firebase está disponible?
+            </div>
+            <div class="result" id="result2">Verificando...</div>
+        </div>
+
+        <!-- TEST 3 -->
+        <div class="test-box" id="test3">
+            <div class="test-title">
+                <span class="status-icon" id="icon3">⏳</span>
+                TEST 3: ¿Firestore está disponible?
+            </div>
+            <div class="result" id="result3">Verificando...</div>
+        </div>
+
+        <!-- TEST 4 -->
+        <div class="test-box" id="test4">
+            <div class="test-title">
+                <span class="status-icon" id="icon4">⏳</span>
+                TEST 4: ¿Existe el contenedor admin-users-container?
+            </div>
+            <div class="result" id="result4">Verificando...</div>
+        </div>
+
+        <!-- TEST 5 -->
+        <div class="test-box" id="test5">
+            <div class="test-title">
+                <span class="status-icon" id="icon5">⏳</span>
+                TEST 5: Usuarios en Firestore
+            </div>
+            <div class="result" id="result5">Contando usuarios...</div>
+            <div class="log-box" id="log5"></div>
+            <button onclick="runTest(5)">🔄 Reintentar Test 5</button>
+        </div>
+
+        <!-- TEST 6 -->
+        <div class="test-box" id="test6">
+            <div class="test-title">
+                <span class="status-icon" id="icon6">⏳</span>
+                TEST 6: Usuario actualmente autenticado
+            </div>
+            <div class="result" id="result6">Verificando...</div>
+        </div>
+
+        <!-- TEST 7 -->
+        <div class="test-box" id="test7">
+            <div class="test-title">
+                <span class="status-icon" id="icon7">ℹ️</span>
+                TEST 7: Acciones Manuales
+            </div>
+            <button onclick="forceRender()">▶ Forzar Renderización de Tabla</button>
+            <button onclick="openConsole()">📱 Abrir Consola (F12)</button>
+            <button onclick="checkAllLibs()">🔧 Verif. Librerías</button>
+        </div>
+
+        <!-- RESUMEN -->
+        <div class="summary" id="summary">
+            <h3>📊 Resumen de Verificación</h3>
+            <div id="summaryText">Ejecutando tests...</div>
+        </div>
+    </div>
+
+    <!-- FIREBASE SCRIPTS -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    <script src="src/js/firebase-config.js"></script>
+    <script src="src/js/admin.js"></script>
+
+    <script>
+        const tests = {
+            1: { name: 'admin.js', icon: '1️⃣' },
+            2: { name: 'Firebase', icon: '2️⃣' },
+            3: { name: 'Firestore', icon: '3️⃣' },
+            4: { name: 'Contenedor', icon: '4️⃣' },
+            5: { name: 'Usuarios', icon: '5️⃣' },
+            6: { name: 'Auth', icon: '6️⃣' }
+        };
+
+        function updateTest(num, status, message, detail = '') {
+            const box = document.getElementById(`test${num}`);
+            const icon = document.getElementById(`icon${num}`);
+            const result = document.getElementById(`result${num}`);
+            
+            box.classList.remove('success', 'error', 'warning');
+            
+            if (status === 'success') {
+                box.classList.add('success');
+                icon.textContent = '✅';
+            } else if (status === 'error') {
+                box.classList.add('error');
+                icon.textContent = '❌';
+            } else if (status === 'warning') {
+                box.classList.add('warning');
+                icon.textContent = '⚠️';
+            }
+            
+            result.innerHTML = `${message}${detail ? `<br><small>${detail}</small>` : ''}`;
+        }
+
+        async function runAllTests() {
+            // Test 1
+            const hasAdminJs = typeof renderizarPanelAdmin === 'function';
+            updateTest(1, hasAdminJs ? 'success' : 'error', 
+                hasAdminJs ? '✅ admin.js cargado correctamente' : '❌ admin.js NO está cargado');
+
+            // Test 2
+            const hasFirebase = typeof firebase !== 'undefined';
+            updateTest(2, hasFirebase ? 'success' : 'error',
+                hasFirebase ? '✅ Firebase está cargado' : '❌ Firebase NO está disponible');
+
+            // Test 3
+            const hasFirestore = typeof firebase?.firestore !== 'undefined';
+            updateTest(3, hasFirestore ? 'success' : 'error',
+                hasFirestore ? '✅ Firestore está cargado' : '❌ Firestore NO está disponible');
+
+            // Test 4
+            const container = document.getElementById('admin-users-container');
+            const hasContainer = !!container;
+            updateTest(4, hasContainer ? 'warning' : 'error',
+                hasContainer ? '⚠️ Contenedor PUEDE existir en otra página (config.html)' : '❌ Contenedor NO existe en esta página');
+
+            // Test 5
+            await runTest(5);
+
+            // Test 6
+            firebase.auth().onAuthStateChanged(user => {
+                if (user) {
+                    updateTest(6, 'success', 
+                        `✅ Logueado como: <strong>${user.email}</strong>`,
+                        `UID: ${user.uid}`);
+                } else {
+                    updateTest(6, 'warning', '⚠️ No hay usuario logueado actualmente');
+                }
+            });
+
+            updateSummary();
+        }
+
+        async function runTest(num) {
+            if (num === 5) {
+                const log = document.getElementById('log5');
+                log.innerHTML = '<div class="log-line">Consultando Firestore...</div>';
+                
+                try {
+                    const clientesSnap = await firebase.firestore().collection('clientes').get();
+                    const adminsSnap = await firebase.firestore().collection('admins').get();
+                    
+                    let html = `<div class="log-line">📊 CLIENTES: ${clientesSnap.size} usuarios</div>`;
+                    html += `<div class="log-line">📊 ADMINS: ${adminsSnap.size} usuarios</div>`;
+                    
+                    if (clientesSnap.size === 0 && adminsSnap.size === 0) {
+                        updateTest(5, 'error',
+                            '❌ NO hay usuarios en Firestore',
+                            'Esto explica por qué no ves nada en la tabla');
+                    } else {
+                        updateTest(5, 'success',
+                            `✅ Se encontraron ${clientesSnap.size + adminsSnap.size} usuarios totales`,
+                            'Presiona "Forzar Renderización" para ver tabla');
+                        
+                        clientesSnap.docs.forEach((doc, idx) => {
+                            const data = doc.data();
+                            html += `<div class="log-line" style="margin-top: 10px;"><strong>Cliente ${idx + 1}:</strong> ${data.nombre || data.email}</div>`;
+                            html += `<div class="log-line" style="padding-left: 20px; font-size: 0.8rem;">rol: ${data.rol || 'N/A'}, estado: ${data.estado || 'N/A'}</div>`;
+                        });
+                    }
+                    
+                    log.innerHTML = html;
+                } catch (error) {
+                    updateTest(5, 'error', '❌ Error al leer Firestore', error.message);
+                    log.innerHTML = `<div class="log-line" style="color: #ff8888;">ERROR: ${error.message}</div>`;
+                }
+            }
+        }
+
+        function forceRender() {
+            if (typeof renderizarPanelAdmin === 'function') {
+                console.log("Intentando renderizar tabla...");
+                renderizarPanelAdmin('admin-users-container');
+                alert("Tabla renderizada. Abre la consola para más detalles.");
+            } else {
+                alert("❌ admin.js no está cargado");
+            }
+        }
+
+        function checkAllLibs() {
+            const libs = {
+                'firebase': typeof firebase,
+                'firebase.auth': typeof firebase?.auth,
+                'firebase.firestore': typeof firebase?.firestore,
+                'renderizarPanelAdmin': typeof renderizarPanelAdmin,
+                'mostrarNotificacion': typeof mostrarNotificacion
+            };
+            
+            console.log('=== LIBRERÍAS CARGADAS ===');
+            Object.entries(libs).forEach(([name, type]) => {
+                console.log(`${name}: ${type === 'function' ? '✅' : '❌'} (${type})`);
+            });
+        }
+
+        function openConsole() {
+            console.log('%c=== PANEL DE DEBUGGING ===', 'color: #00ff88; font-size: 16px; font-weight: bold;');
+            console.log('Ejecuta: runAllTests() para ver todos los tests');
+            alert('Consola abierta. Ve a F12 > Console para ver detalles');
+        }
+
+        function updateSummary() {
+            // Cuenta tests pasados
+            const passed = document.querySelectorAll('.test-box.success').length;
+            const failed = document.querySelectorAll('.test-box.error').length;
+            const warnings = document.querySelectorAll('.test-box.warning').length;
+            
+            const summaryText = document.getElementById('summaryText');
+            let html = `✅ PASADOS: ${passed} | ❌ ERRORES: ${failed} | ⚠️ ADVERTENCIAS: ${warnings}`;
+            
+            if (failed === 0 && passed > 4) {
+                html += '<p style="margin-top: 10px; color: #00ff88;">🎉 ¡Todo parece estar bien! Si no ves tabla, usa "Forzar Renderización"</p>';
+            } else if (failed > 0) {
+                html += '<p style="margin-top: 10px; color: #ff8888;">⚠️ Hay problemas detectados arriba</p>';
+            }
+            
+            summaryText.innerHTML = html;
+        }
+
+        // Ejecutar tests al cargar
+        window.addEventListener('load', runAllTests);
+    </script>
+</body>
+</html>

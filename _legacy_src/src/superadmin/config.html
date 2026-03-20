@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Configuración Superadmin | Victorious Studio</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,300,0,0" rel="stylesheet">
+    
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    
+    <script src="../js/firebase-config.js"></script>
+    <script src="../js/admin.js"></script>
+    <link rel="stylesheet" href="../styles/main.css">
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <button class="btn btn-ghost" onclick="window.location.href='../admin/panel.html'">
+                <span class="material-symbols-outlined">arrow_back</span>
+            </button>
+            <h1 style="font-family: var(--font-display); font-size: 1.25rem;">Superadmin</h1>
+            <button class="btn btn-ghost" onclick="logout()">
+                <span class="material-symbols-outlined">logout</span>
+            </button>
+        </div>
+    </header>
+
+    <main class="container" style="padding-top: 100px; padding-bottom: 100px;">
+        
+        <div class="card" style="margin-bottom: 1.5rem;">
+            <div style="padding: 1.5rem;">
+                <h2 style="font-family: var(--font-display); font-size: 1.125rem; margin-bottom: 1rem;">Gestión de Administradores</h2>
+                
+                <div id="admins-lista" style="margin-bottom: 1.5rem;"></div>
+                
+                <button class="btn btn-primary btn-block" onclick="agregarAdmin()">
+                    <span class="material-symbols-outlined">person_add</span>
+                    Agregar Victor como Admin
+                </button>
+            </div>
+        </div>
+        
+        <!-- PANEL DE GESTIÓN DE USUARIOS -->
+        <div class="card" style="margin-bottom: 1.5rem;">
+            <div style="padding: 1.5rem;">
+                <h2 style="font-family: var(--font-display); font-size: 1.125rem; margin-bottom: 1rem;">Gestión de Usuarios</h2>
+                <p style="font-size: 0.875rem; color: var(--text-muted); margin-bottom: 1rem;">Cambiar roles, bloquear usuarios o eliminarlos del sistema</p>
+                <div id="admin-users-container"></div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div style="padding: 1.5rem;">
+                <h2 style="font-family: var(--font-display); font-size: 1.125rem; margin-bottom: 1rem;">Configuración del Sistema</h2>
+                
+                <div class="form-group">
+                    <label class="form-label">Precio del corte (COP)</label>
+                    <input type="number" class="form-input" id="config-precio" value="25000">
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Cortes para fidelización</label>
+                    <input type="number" class="form-input" id="config-fidelizacion" value="10">
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Número Nequi (sin +57)</label>
+                    <input type="text" class="form-input" id="config-nequi" value="3125800522">
+                </div>
+                
+                <button class="btn btn-primary btn-block" onclick="guardarConfig()" style="margin-top: 1rem;">
+                    Guardar Cambios
+                </button>
+            </div>
+        </div>
+        
+    </main>
+
+    <script>
+        // Verificar que el usuario es SUPERADMIN verificando desde Firestore
+        firebase.auth().onAuthStateChanged(async (user) => {
+            if (!user) {
+                alert('Debes iniciar sesión primero');
+                window.location.href = '../../index.html';
+                return;
+            }
+
+            // Verificar que el usuario está en la colección 'admins' con role 'superadmin'
+            try {
+                const adminDoc = await firebase.firestore().collection('admins').doc(user.uid).get();
+                if (!adminDoc.exists) {
+                    alert('Acceso restringido a superadmins');
+                    window.location.href = '../../index.html';
+                    return;
+                }
+                
+                // Verificar que el role sea 'superadmin' (IMPORTANTE: el campo es 'role', no 'rol')
+                const datos = adminDoc.data();
+                if (datos.role !== 'superadmin') {
+                    alert('Solo superadmins pueden acceder aquí');
+                    window.location.href = '../../index.html';
+                    return;
+                }
+            } catch (error) {
+                console.error('Error verificando permisos de superadmin:', error);
+                alert('Error al verificar permisos');
+                window.location.href = '../../index.html';
+                return;
+            }
+
+            cargarAdmins();
+            inicializarPanelAdmin();
+        });
+        
+        // Inicializar panel de gestión de usuarios
+        async function inicializarPanelAdmin() {
+            const maxIntents = 20;
+            let intents = 0;
+            
+            const verificar = setInterval(() => {
+                intents++;
+                if (typeof renderizarPanelAdmin === 'function') {
+                    clearInterval(verificar);
+                    renderizarPanelAdmin('admin-users-container');
+                } else if (intents >= maxIntents) {
+                    clearInterval(verificar);
+                    console.warn('admin.js no está disponible');
+                }
+            }, 100);
+        }
+        
+        async function cargarAdmins() {
+            const snapshot = await firebase.firestore().collection('admins').get();
+            const lista = document.getElementById('admins-lista');
+            
+            if (snapshot.empty) {
+                lista.innerHTML = '<p style="color: var(--text-muted); font-size: 0.875rem;">No hay administradores asignados</p>';
+                return;
+            }
+            
+            lista.innerHTML = '';
+            snapshot.forEach(doc => {
+                const admin = doc.data();
+                const div = document.createElement('div');
+                div.style.cssText = 'display: flex; justify-content: space-between; align-items: center; padding: 0.75rem; background: var(--bg-tertiary); border-radius: var(--radius-md); margin-bottom: 0.5rem;';
+                div.innerHTML = `
+                    <div>
+                        <p style="font-weight: 600;">${admin.nombre || 'Sin nombre'}</p>
+                        <p style="font-size: 0.75rem; color: var(--text-muted);">${admin.email}</p>
+                    </div>
+                    <button class="btn btn-danger btn-sm" onclick="eliminarAdmin('${doc.id}')">
+                        <span class="material-symbols-outlined">delete</span>
+                    </button>
+                `;
+                lista.appendChild(div);
+            });
+        }
+        
+        async function agregarAdmin() {
+            const email = prompt('Email del nuevo admin (Victor):');
+            if (!email) return;
+            
+            try {
+                await firebase.firestore().collection('admins').add({
+                    email: email,
+                    nombre: 'Victor Méndez',
+                    creadoEn: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                
+                alert('Admin agregado. Victor debe iniciar sesión con Google con ese email.');
+                cargarAdmins();
+                
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error al agregar admin');
+            }
+        }
+        
+        async function eliminarAdmin(id) {
+            if (!confirm('¿Eliminar este admin?')) return;
+            await firebase.firestore().collection('admins').doc(id).delete();
+            cargarAdmins();
+        }
+        
+        async function guardarConfig() {
+            const config = {
+                precioCorte: parseInt(document.getElementById('config-precio').value),
+                cortesFidelizacion: parseInt(document.getElementById('config-fidelizacion').value),
+                numeroNequi: document.getElementById('config-nequi').value,
+                actualizadoEn: firebase.firestore.FieldValue.serverTimestamp()
+            };
+            
+            await firebase.firestore().collection('config').doc('sistema').set(config);
+            alert('Configuración guardada');
+        }
+        
+        function logout() {
+            // Logout Firebase
+            firebase.auth().signOut().then(() => {
+                window.location.href = '../../index.html';
+            }).catch(error => {
+                console.error('Error en logout:', error);
+                window.location.href = '../../index.html';
+            });
+        }
+    </script>
+</body>
+</html>

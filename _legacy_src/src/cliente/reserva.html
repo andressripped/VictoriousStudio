@@ -1,0 +1,921 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reservar Cita | Victorious Studio</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,300,0,0" rel="stylesheet">
+    
+    <!-- Primero Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-storage-compat.js"></script>
+
+<!-- Luego tu configuración de Firebase -->
+    <script src="../js/firebase-config.js"></script>
+    <script type="module" src="../components/menu.js"></script>
+    <script type="module" src="../components/auth.js"></script>
+    <script type="module" src="../components/historial.js"></script>
+    <link rel="stylesheet" href="../styles/main.css">
+    <link rel="stylesheet" href="../components/ui.css">
+    
+    <script>
+    console.log("🟡 Verificación inmediata:");
+    console.log("- window.firebaseApp:", window.firebaseApp);
+    console.log("- window.firestoreHelper:", window.firestoreHelper);
+    
+    if (!window.firestoreHelper) {
+        console.error("❌ firestoreHelper sigue undefined después de cargar");
+    } else {
+        console.log("✅ firestoreHelper DEFINIDO:", Object.keys(window.firestoreHelper));
+    }
+    </script>
+
+    <style>
+        .step-content { display: none; animation: fadeIn 0.4s ease; }
+        .step-content.active { display: block; }
+        .resumen-box { background: var(--bg-tertiary); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 1rem; margin-bottom: 1rem; }
+        .metodo-pago-card { border: 2px solid var(--border-subtle); border-radius: var(--radius-lg); padding: 1.5rem; cursor: pointer; transition: all 0.3s ease; text-align: center; }
+        .metodo-pago-card:hover { border-color: var(--border-medium); }
+        .metodo-pago-card.selected { border-color: var(--accent-white); background: rgba(255,255,255,0.05); }
+        .comprobante-preview { max-width: 100%; max-height: 300px; border-radius: var(--radius-md); margin-top: 1rem; }
+        .calendar-day.bloqueado, .calendar-day.ocupado { opacity: 0.5; cursor: not-allowed; background: rgba(239, 68, 68, 0.1); color: var(--accent-danger); }
+        .time-slot.ocupado { opacity: 0.5; cursor: not-allowed; text-decoration: line-through; background: rgba(239, 68, 68, 0.1); }
+    </style>
+</head>
+<body>
+    <!-- Header con sección de usuario -->
+    <header class="header">
+        <div class="container header-content" style="display:flex; align-items:center; justify-content:space-between;">
+            <div style="display:flex; align-items:center; gap:1rem;">
+                <button class="btn btn-ghost" onclick="history.back()">
+                    <span class="material-symbols-outlined">arrow_back</span>
+                </button>
+                <div style="text-align: center;">
+                    <p style="font-size: 0.625rem; text-transform: uppercase; letter-spacing: 0.2em; color: var(--text-muted);">Reserva tu cita</p>
+                    <h1 style="font-size: 1.125rem; font-weight: 600;">Paso <span id="step-number">1</span> de 5</h1>
+                </div>
+            </div>
+            <div style="display:flex; align-items:center; gap:1rem;">
+                <div id="auth-section" style="display:flex; align-items:center; gap:0.5rem;">
+                    <!-- avatar o logout se insertará aquí vía JS -->
+                </div>
+                <button class="btn btn-ghost" onclick="window.location.href='../../index.html'">
+                    <span class="material-symbols-outlined">close</span>
+                </button>
+            </div>
+        </div>
+        <div style="padding: 0 1rem 1rem;">
+            <div class="steps">
+                <div class="step active" id="progress-1"></div>
+                <div class="step" id="progress-2"></div>
+                <div class="step" id="progress-3"></div>
+                <div class="step" id="progress-4"></div>
+                <div class="step" id="progress-5"></div>
+            </div>
+        </div>
+    </header>
+
+    <main class="container" style="padding-top: 140px; padding-bottom: 120px;">
+        
+        <!-- PASO 1: SERVICIO (sin cambios funcionales) -->
+        <div id="step-1" class="step-content active">
+            <p id="greeting-text" style="font-size:0.875rem; color:var(--text-muted); margin-bottom:0.5rem;"></p>
+            <h2 style="font-family: var(--font-display); font-size: 1.5rem; margin-bottom: 0.5rem;">Selecciona el servicio</h2>
+            <p style="color: var(--text-muted); font-size: 0.875rem; margin-bottom: 1.5rem;">Solo un corte, pero perfecto.</p>
+            
+            <div class="card" style="cursor: pointer; border: 2px solid var(--accent-white); box-shadow: var(--shadow-glow);" onclick="selectService()">
+                <div style="padding: 1.5rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 1rem;">
+                        <div>
+                            <h3 style="font-family: var(--font-display); font-size: 1.25rem; margin-bottom: 0.25rem;">Corte Victorious</h3>
+                            <p style="font-size: 0.75rem; color: var(--text-muted);">45 minutos</p>
+                        </div>
+                        <span class="material-symbols-outlined" style="color: var(--accent-white);">check_circle</span>
+                    </div>
+                    <p style="font-size: 0.875rem; color: var(--text-secondary); line-height: 1.6; margin-bottom: 1rem;">
+                        Arquitectura capilar adaptada a la morfología de tu rostro. Incluye lavado, corte preciso con técnica fade o taper, styling con productos premium.
+                    </p>
+                    <div style="display: flex; align-items: center; gap: 1rem;">
+                        <span style="font-size: 1.5rem; font-weight: 700;" id="precio-servicio">$25.000</span>
+                        <span class="badge badge-confirmado hidden" id="badge-descuento">-10% Primera vez</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="margin-top: 2rem; text-align: center;">
+                <p style="font-size: 0.75rem; color: var(--text-muted);">¿Necesitas algo más?</p>
+                <a href="https://wa.me/573125800522?text=Hola%20Victor,%20quiero%20consultar%20sobre%20otros%20servicios" 
+                   style="color: var(--text-primary); font-size: 0.875rem; display: inline-flex; align-items: center; gap: 0.5rem; margin-top: 0.5rem;">
+                    <span class="material-symbols-outlined">chat</span>
+                    Escribir a Victor
+                </a>
+            </div>
+            
+            <button class="btn btn-primary btn-block btn-lg" style="margin-top: 2rem;" onclick="nextStep()">
+                Continuar
+                <span class="material-symbols-outlined">arrow_forward</span>
+            </button>
+        </div>
+
+        <!-- PASO 2: FECHA Y HORA (LÓGICA ACTUALIZADA) -->
+        <div id="step-2" class="step-content">
+            <h2 style="font-family: var(--font-display); font-size: 1.5rem; margin-bottom: 0.5rem;">¿Cuándo?</h2>
+            <p style="color: var(--text-muted); font-size: 0.875rem; margin-bottom: 1.5rem;">Selecciona fecha y hora disponible.</p>
+            
+            <div class="card" style="margin-bottom: 1.5rem;">
+                <div style="padding: 1rem; border-bottom: 1px solid var(--border-subtle); display: flex; justify-content: space-between; align-items: center;">
+                    <h3 id="mes-actual" style="font-size: 1rem; font-weight: 600;">Febrero 2024</h3>
+                    <div style="display: flex; gap: 0.5rem;">
+                        <button class="btn btn-ghost btn-sm" onclick="cambiarMes(-1)">
+                            <span class="material-symbols-outlined">chevron_left</span>
+                        </button>
+                        <button class="btn btn-ghost btn-sm" onclick="cambiarMes(1)">
+                            <span class="material-symbols-outlined">chevron_right</span>
+                        </button>
+                    </div>
+                </div>
+                
+                <div style="padding: 1rem;">
+                    <div class="calendar" id="dias-header">
+                        <div class="calendar-header">Lu</div>
+                        <div class="calendar-header">Ma</div>
+                        <div class="calendar-header">Mi</div>
+                        <div class="calendar-header">Ju</div>
+                        <div class="calendar-header">Vi</div>
+                        <div class="calendar-header">Sa</div>
+                        <div class="calendar-header">Do</div>
+                    </div>
+                    <div class="calendar" id="dias-grid" style="margin-top: 0.5rem;"></div>
+                </div>
+            </div>
+            
+            <div id="horarios-section" class="hidden">
+                <h3 style="font-size: 0.875rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); margin-bottom: 1rem;">
+                    Horarios para <span id="fecha-seleccionada-texto"></span>
+                </h3>
+                <div class="time-slots" id="horarios-grid"></div>
+            </div>
+            
+            <div style="display: flex; gap: 1rem; margin-top: 2rem;">
+                <button class="btn btn-secondary btn-block" onclick="prevStep()">Atrás</button>
+                <button class="btn btn-primary btn-block" onclick="nextStep()" id="btn-continuar-2" disabled>
+                    Continuar
+                </button>
+            </div>
+        </div>
+
+        <!-- PASO 3: TUS DATOS (sin cambios) -->
+        <div id="step-3" class="step-content">
+            <h2 style="font-family: var(--font-display); font-size: 1.5rem; margin-bottom: 0.5rem;">Tus datos</h2>
+            <p style="color: var(--text-muted); font-size: 0.875rem; margin-bottom: 1.5rem;">Verifica tu información.</p>
+            
+            <div class="card" style="margin-bottom: 1.5rem;">
+                <div style="padding: 1.5rem;">
+                    <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem;">
+                        <img id="user-foto" src="" style="width: 60px; height: 60px; border-radius: 50%; object-fit: cover;">
+                        <div>
+                            <h3 id="user-nombre" style="font-weight: 600;"></h3>
+                            <p id="user-email" style="font-size: 0.875rem; color: var(--text-muted);"></p>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Teléfono (para recordatorios)</label>
+                        <input type="tel" class="form-input" id="telefono" placeholder="312 000 0000">
+                    </div>
+                    
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label class="form-label">Notas para Victor (opcional)</label>
+                        <textarea class="form-textarea" id="notas" rows="3" 
+                                  placeholder="Ej: Me gusta el fade alto, tengo el cabello grueso, llegaré 10 min tarde..."></textarea>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="display: flex; gap: 1rem; margin-top: 2rem;">
+                <button class="btn btn-secondary btn-block" onclick="prevStep()">Atrás</button>
+                <button class="btn btn-primary btn-block" onclick="nextStep()">
+                    Continuar
+                </button>
+            </div>
+        </div>
+
+        <!-- PASO 4: PAGO (sin cambios estructurales, usa firestoreHelper) -->
+        <div id="step-4" class="step-content">
+            <h2 style="font-family: var(--font-display); font-size: 1.5rem; margin-bottom: 0.5rem;">Método de pago</h2>
+            <p style="color: var(--text-muted); font-size: 0.875rem; margin-bottom: 1.5rem;">Elige cómo prefieres pagar.</p>
+            
+            <div class="resumen-box">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                    <span style="color: var(--text-muted);">Corte Victorious</span>
+                    <span>$25.000</span>
+                </div>
+                <div id="resumen-descuentos" style="display: none;"></div>
+                <div style="display: flex; justify-content: space-between; margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid var(--border-subtle); font-weight: 700; font-size: 1.125rem;">
+                    <span>Total a pagar</span>
+                    <span id="total-pagar">$25.000</span>
+                </div>
+            </div>
+            
+            <div style="display: grid; gap: 1rem; margin-bottom: 1.5rem;">
+                <div class="metodo-pago-card" onclick="selectMetodoPago('efectivo')" id="pago-efectivo">
+                    <span class="material-symbols-outlined" style="font-size: 2rem; margin-bottom: 0.5rem;">payments</span>
+                    <h4 style="font-weight: 600; margin-bottom: 0.25rem;">Efectivo</h4>
+                    <p style="font-size: 0.75rem; color: var(--text-muted);">Pagas al llegar al local</p>
+                </div>
+                
+                <div class="metodo-pago-card" onclick="selectMetodoPago('nequi')" id="pago-nequi">
+                    <span class="material-symbols-outlined" style="font-size: 2rem; margin-bottom: 0.5rem;">smartphone</span>
+                    <h4 style="font-weight: 600; margin-bottom: 0.25rem;">Nequi</h4>
+                    <p style="font-size: 0.75rem; color: var(--text-muted);">Transfiere ahora y sube comprobante</p>
+                </div>
+            </div>
+            
+            <div id="nequi-instructions" class="hidden">
+                <div class="card" style="background: rgba(59, 130, 246, 0.05); border-color: rgba(59, 130, 246, 0.3);">
+                    <div style="padding: 1.5rem;">
+                        <h4 style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem;">
+                            <span class="material-symbols-outlined" style="color: var(--accent-info);">info</span>
+                            Instrucciones Nequi
+                        </h4>
+                        <ol style="font-size: 0.875rem; color: var(--text-secondary); line-height: 1.8; padding-left: 1.2rem; margin-bottom: 1rem;">
+                            <li>Abre tu app Nequi</li>
+                            <li>Transfiere <strong id="monto-nequi">$25.000</strong> al número:</li>
+                        </ol>
+                        <div style="background: var(--bg-primary); padding: 1rem; border-radius: var(--radius-md); text-align: center; margin-bottom: 1rem;">
+                            <span style="font-size: 1.5rem; font-weight: 700; letter-spacing: 0.1em;">312 580 0522</span>
+                            <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">A nombre de: Victor Méndez</p>
+                        </div>
+                        <p style="font-size: 0.875rem; color: var(--text-secondary);">
+                            3. Sube el screenshot del comprobante aquí:
+                        </p>
+                        
+                        <div class="upload-zone" onclick="document.getElementById('input-comprobante').click()" id="upload-zone">
+                            <span class="material-symbols-outlined" style="font-size: 2.5rem; color: var(--text-muted); margin-bottom: 0.5rem;">upload</span>
+                            <p style="font-size: 0.875rem; color: var(--text-secondary);">Toca para subir comprobante</p>
+                            <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">JPG o PNG</p>
+                        </div>
+                        <input type="file" id="input-comprobante" accept="image/*" style="display: none;" onchange="handleComprobante(event)">
+                        <img id="preview-comprobante" class="comprobante-preview hidden">
+                        
+                        <div class="form-group" style="margin-top: 1rem; margin-bottom: 0;">
+                            <label class="form-label">Nota sobre el pago (opcional)</label>
+                            <input type="text" class="form-input" id="nota-pago" placeholder="Ej: Te envío desde Nequi de mi mamá">
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="display: flex; gap: 1rem; margin-top: 2rem;">
+                <button class="btn btn-secondary btn-block" onclick="prevStep()">Atrás</button>
+                <button class="btn btn-primary btn-block" onclick="nextStep()" id="btn-continuar-4" disabled>
+                    Continuar
+                </button>
+            </div>
+        </div>
+
+        <!-- PASO 5: CONFIRMACIÓN (sin cambios) -->
+        <!-- PASO 5: CONFIRMACIÓN - CORREGIDO -->
+<div id="step-5" class="step-content">
+    <!-- Icono de éxito centrado -->
+    <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 60vh;">
+        <div style="text-align: center; width: 100%; max-width: 400px; margin: 0 auto;">
+            <!-- Icono -->
+            <div style="
+                width: 80px; 
+                height: 80px; 
+                background: rgba(16, 185, 129, 0.1); 
+                border-radius: 50%; 
+                display: flex; 
+                align-items: center; 
+                justify-content: center; 
+                margin: 0 auto 1.5rem;
+            ">
+                <span class="material-symbols-outlined" style="font-size: 2.5rem; color: var(--accent-success);">
+                    check
+                </span>
+            </div>
+            
+            <h2 style="font-family: var(--font-display); font-size: 1.75rem; margin-bottom: 0.5rem;">
+                ¡Reserva creada!
+            </h2>
+            <p style="color: var(--text-muted); margin-bottom: 2rem;">
+                Revisa los detalles de tu cita.
+            </p>
+            
+            <!-- Tarjeta de detalles -->
+            <div class="card" style="margin-bottom: 1.5rem; text-align: left;">
+                <div style="padding: 1.5rem;">
+                    <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 1px solid var(--border-subtle);">
+                        <span class="material-symbols-outlined" style="color: var(--text-muted);">event</span>
+                        <div>
+                            <p style="font-size: 0.75rem; color: var(--text-muted);">Fecha y hora</p>
+                            <p style="font-weight: 600;" id="confirm-fecha-hora"></p>
+                        </div>
+                    </div>
+                    
+                    <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 1px solid var(--border-subtle);">
+                        <span class="material-symbols-outlined" style="color: var(--text-muted);">content_cut</span>
+                        <div>
+                            <p style="font-size: 0.75rem; color: var(--text-muted);">Servicio</p>
+                            <p style="font-weight: 600;">Corte Victorious</p>
+                        </div>
+                    </div>
+                    
+                    <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 1px solid var(--border-subtle);">
+                        <span class="material-symbols-outlined" style="color: var(--text-muted);">payments</span>
+                        <div>
+                            <p style="font-size: 0.75rem; color: var(--text-muted);">Método de pago</p>
+                            <p style="font-weight: 600;" id="confirm-pago"></p>
+                        </div>
+                    </div>
+                    
+                    <div style="display: flex; align-items: center; gap: 0.75rem;">
+                        <span class="material-symbols-outlined" style="color: var(--text-muted);">location_on</span>
+                        <div>
+                            <p style="font-size: 0.75rem; color: var(--text-muted);">Ubicación</p>
+                            <p style="font-weight: 600; font-size: 0.875rem;">Cra. 9 #11-26 Local 103, San Gil</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Estado del pago (solo para Nequi) -->
+            <div id="estado-pago-box" class="hidden" style="margin-bottom: 1.5rem;">
+                <div style="
+                    background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(59, 130, 246, 0.05) 100%);
+                    border: 1px solid rgba(59, 130, 246, 0.3);
+                    border-radius: var(--radius-lg);
+                    padding: 1.25rem;
+                    display: flex;
+                    align-items: center;
+                    gap: 1rem;
+                    text-align: left;
+                ">
+                    <div style="
+                        width: 48px;
+                        height: 48px;
+                        background: rgba(59, 130, 246, 0.2);
+                        border-radius: var(--radius-full);
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        flex-shrink: 0;
+                    ">
+                        <span class="material-symbols-outlined" style="color: var(--accent-info); font-size: 1.75rem;">
+                            hourglass_top
+                        </span>
+                    </div>
+                    
+                    <div style="flex: 1;">
+                        <p style="font-size: 0.875rem; color: var(--text-secondary); line-height: 1.5; margin: 0;">
+                            Tu comprobante está en revisión. Victor lo confirmará pronto.
+                        </p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Botones de acción -->
+            <div style="display: grid; gap: 1rem; margin-top: 1rem;">
+                <a href="https://wa.me/573125800522?text=Hola%20Victor,%20quiero%20modificar%20mi%20cita" 
+                   class="btn btn-secondary" style="text-decoration: none; display: flex; align-items: center; justify-content: center; gap: 0.5rem;">
+                    <span class="material-symbols-outlined">edit</span>
+                    Modificar vía WhatsApp
+                </a>
+                
+                <a href="https://wa.me/573125800522?text=Hola%20Victor,%20quiero%20cancelar%20mi%20cita" 
+                   class="btn btn-danger" style="text-decoration: none; display: flex; align-items: center; justify-content: center; gap: 0.5rem;">
+                    <span class="material-symbols-outlined">close</span>
+                    Cancelar vía WhatsApp
+                </a>
+            </div>
+            
+            <button class="btn btn-primary btn-block btn-lg" style="margin-top: 2rem;" onclick="window.location.href='perfil.html'">
+                Ver mis citas
+            </button>
+        </div>
+    </div>
+</div>
+    </main>
+
+    <script>
+
+        // Esperar a que todo cargue
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log("DOM cargado, verificando dependencias...");
+            console.log("firebaseApp:", window.firebaseApp);
+            console.log("firestoreHelper:", window.firestoreHelper);
+    
+            if (!window.firestoreHelper) {
+                console.error("❌ firestoreHelper NO está definido");
+                alert("Error cargando el sistema. Recarga la página.");
+                return;
+            }
+    
+        });
+        // Estado de reserva (se mantiene igual)
+        let reservaData = {
+            servicio: window.firebaseApp.SERVICIO_VICTORIOUS,
+            fecha: null,
+            hora: null,
+            telefono: '',
+            notas: '',
+            metodoPago: null,
+            comprobanteUrl: null,
+            descuentos: [],
+            precioFinal: 25000
+        };
+        
+        let currentStep = 1;
+        let currentUser = null;
+        let clienteData = null;
+        let fechaActual = new Date();
+
+        // Variable global para guardar el comprobante temporalmente
+        let comprobantePendiente = null;
+        
+        // Listeners y caché de datos para reactividad
+        let citasListener = null;
+        let bloqueosListener = null;
+        let citasGlobal = [];
+        let bloqueosGlobal = [];
+
+        // Almacén local de horas ocupadas y bloqueos para la fecha seleccionada
+        let horasOcupadas = new Set();
+        let bloqueosDelDia = []; // bloqueos que aplican a la fecha actual
+
+        // función auxiliar para actualizar el header cuando hay usuario
+        function updateHeaderAuth(user) {
+            const authSection = document.getElementById('auth-section');
+            if (!authSection) return;
+            if (user) {
+                authSection.innerHTML = `
+                    <div class="profile-container">
+                        <img src="${user.photoURL}" id="profile-avatar" class="profile-avatar" alt="Avatar">
+                        <div class="profile-menu" id="profile-menu">
+                            <a href="/perfil">Mi perfil</a>
+                            <a href="/configuraciones">Configuraciones</a>
+                            <a href="#" onclick="logout()">Cerrar sesión</a>
+                        </div>
+                    </div>
+                `;
+                window.initProfileMenu && window.initProfileMenu();
+            } else {
+                authSection.innerHTML = '';
+            }
+        }
+        
+        // Inicialización
+        document.addEventListener('DOMContentLoaded', async () => {
+            firebase.auth().onAuthStateChanged(async (user) => {
+                if (!user) {
+                    window.location.href = '../../index.html';
+                    return;
+                }
+                currentUser = user;
+                // obtener rol y si no es cliente redirigir al panel adecuado
+                const rol = await window.firebaseApp.determinarRol(user);
+                userRole = rol;
+                if (rol !== window.firebaseApp.ROLES.CLIENTE) {
+                    if (rol === window.firebaseApp.ROLES.ADMIN) {
+                        window.location.href = '../admin/panel.html';
+                    } else if (rol === window.firebaseApp.ROLES.SUPERADMIN) {
+                        window.location.href = '../superadmin/config.html';
+                    } else {
+                        window.location.href = '../../index.html';
+                    }
+                    return;
+                }
+                // actualizar menú de perfil en el header
+                updateHeaderAuth(user);
+                
+                const doc = await firebase.firestore().collection('clientes').doc(user.uid).get();
+                clienteData = doc.data() || {};
+                
+                document.getElementById('user-nombre').textContent = user.displayName;
+                document.getElementById('user-email').textContent = user.email;
+                document.getElementById('user-foto').src = user.photoURL;
+                document.getElementById('telefono').value = clienteData.telefono || '';
+                // mostrar saludo
+                const greet = document.getElementById('greeting-text');
+                if (greet) {
+                    greet.textContent = `Hola, ${currentUser.displayName || ''}!`;
+                    if (clienteData && clienteData.prefs && clienteData.prefs.mensaje) {
+                        greet.textContent += ` ${clienteData.prefs.mensaje}`;
+                    }
+                }
+                
+                if (clienteData.primeraReserva && clienteData.descuentoPrimera) {
+                    document.getElementById('badge-descuento').classList.remove('hidden');
+                    reservaData.descuentos.push({ tipo: 'porcentaje', valor: 10, nombre: 'Primera vez' });
+                    reservaData.precioFinal = 22500;
+                }
+
+                // registrar listeners para actualizar disponibilidad en tiempo real
+                citasListener = window.firestoreHelper.onCitasChange((citas) => {
+                    citasGlobal = citas;
+                    if (reservaData.fecha) {
+                        // refrescar horas para la fecha seleccionada
+                        selectFecha(reservaData.fecha);
+                    }
+                });
+
+                bloqueosListener = window.firestoreHelper.onBloqueosChange((bloqueos) => {
+                    bloqueosGlobal = bloqueos;
+                    // re-render calendar y horas si hay una fecha elegida
+                    renderCalendario();
+                    if (reservaData.fecha) selectFecha(reservaData.fecha);
+                });
+            });
+        });
+        
+        // Navegación steps (sin cambios)
+        function nextStep() {
+            if (currentStep === 1) { /* ya seleccionado */ }
+            else if (currentStep === 2) {
+                if (!reservaData.fecha || !reservaData.hora) {
+                    alert('Selecciona fecha y hora');
+                    return;
+                }
+            } else if (currentStep === 3) {
+                const tel = document.getElementById('telefono').value.trim();
+                if (!tel) {
+                    alert('Ingresa tu teléfono para recordatorios');
+                    return;
+                }
+                reservaData.telefono = tel;
+                reservaData.notas = document.getElementById('notas').value.trim();
+            } else if (currentStep === 4) {
+                if (!reservaData.metodoPago) {
+                    alert('Selecciona método de pago');
+                    return;
+                }
+                if (reservaData.metodoPago === 'nequi' && !comprobantePendiente && !reservaData.comprobanteUrl) {
+                    alert('Sube el comprobante de pago Nequi');
+                    return;
+                }
+                crearReserva();
+                return;
+            }
+            
+            document.getElementById(`step-${currentStep}`).classList.remove('active');
+            document.getElementById(`progress-${currentStep}`).classList.add('completed');
+            currentStep++;
+            document.getElementById(`step-${currentStep}`).classList.add('active');
+            document.getElementById(`progress-${currentStep}`).classList.add('active');
+            document.getElementById('step-number').textContent = currentStep;
+        }
+        
+        function prevStep() {
+            if (currentStep === 1) return;
+            document.getElementById(`step-${currentStep}`).classList.remove('active');
+            document.getElementById(`progress-${currentStep}`).classList.remove('active');
+            currentStep--;
+            document.getElementById(`step-${currentStep}`).classList.add('active');
+            document.getElementById('step-number').textContent = currentStep;
+        }
+        
+        function selectService() {
+            // Ya está preseleccionado
+        }
+        
+        // Calendario
+        function renderCalendario() {
+            const year = fechaActual.getFullYear();
+            const month = fechaActual.getMonth();
+            
+            document.getElementById('mes-actual').textContent = 
+                new Date(year, month).toLocaleDateString('es-CO', { month: 'long', year: 'numeric' });
+            
+            const primerDia = new Date(year, month, 1).getDay(); // 0=Dom, 1=Lun...
+            const diasEnMes = new Date(year, month + 1, 0).getDate();
+            const hoy = new Date();
+            hoy.setHours(0,0,0,0);
+            
+            const grid = document.getElementById('dias-grid');
+            grid.innerHTML = '';
+            
+            // Ajuste para empezar en Lunes (si primerDia=0(Dom), offset=6; si no, offset=primerDia-1)
+            let offset = (primerDia === 0) ? 6 : primerDia - 1;
+            
+            for (let i = 0; i < offset; i++) {
+                const empty = document.createElement('div');
+                empty.className = 'calendar-day';
+                grid.appendChild(empty);
+            }
+            
+            for (let dia = 1; dia <= diasEnMes; dia++) {
+                const fecha = new Date(year, month, dia);
+                const fechaStr = fecha.toISOString().split('T')[0];
+                const btn = document.createElement('button');
+                btn.className = 'calendar-day';
+                btn.textContent = dia;
+                btn.dataset.fecha = fechaStr; // para reutilizar
+                
+                if (fecha < hoy) {
+                    btn.classList.add('disabled');
+                } else {
+                    btn.onclick = () => selectFecha(fecha, btn);
+                }
+                
+                if (reservaData.fecha && fechaStr === reservaData.fecha.toISOString().split('T')[0]) {
+                    btn.classList.add('selected');
+                }
+                
+                grid.appendChild(btn);
+            }
+            
+            // Ahora aplicamos bloqueos usando el cache global
+            aplicarEstilosBloqueos();
+        }
+        
+        function aplicarEstilosBloqueos() {
+            // Usa la caché global (bloqueosGlobal) para marcar días bloqueados
+            const diasBloqueados = new Set(
+                bloqueosGlobal
+                    .filter(b => b.tipo === 'completo')
+                    .map(b => b.fecha)
+            );
+            
+            document.querySelectorAll('.calendar-day').forEach(btn => {
+                const fechaStr = btn.dataset.fecha;
+                if (fechaStr && diasBloqueados.has(fechaStr)) {
+                    btn.classList.add('bloqueado');
+                    btn.onclick = null; // Deshabilitar click
+                }
+            });
+        }
+        
+        function cambiarMes(delta) {
+            fechaActual.setMonth(fechaActual.getMonth() + delta);
+            renderCalendario();
+            // Ocultar horarios al cambiar mes
+            document.getElementById('horarios-section').classList.add('hidden');
+            reservaData.fecha = null;
+            reservaData.hora = null;
+        }
+        
+        async function selectFecha(fecha, btnElement) {
+            // si no se pasa el botón, lo buscamos por data-fecha
+            const fechaStr = fecha.toISOString().split('T')[0];
+            if (!btnElement) {
+                btnElement = document.querySelector(`.calendar-day[data-fecha="${fechaStr}"]`);
+            }
+
+            document.querySelectorAll('.calendar-day.selected').forEach(el => {
+                el.classList.remove('selected');
+            });
+            if (btnElement) btnElement.classList.add('selected');
+            
+            reservaData.fecha = fecha;
+            reservaData.hora = null;
+            
+            // recuperar datos desde cache o, si no, desde firestore
+            let citasArray = [];
+            let bloqueosArray = [];
+
+            if (citasGlobal.length) {
+                citasArray = citasGlobal.filter(c => c.fecha === fechaStr);
+            }
+            if (bloqueosGlobal.length) {
+                bloqueosArray = bloqueosGlobal.filter(b => b.fecha === fechaStr);
+            }
+
+            if (!citasArray.length || !bloqueosArray.length) {
+                // caemos al fetch solo si no había datos
+                const citasSnapshot = await firebase.firestore()
+                    .collection('citas')
+                    .where('fecha', '==', fechaStr)
+                    .where('estado', 'in', ['confirmado', 'pendiente_pago', 'completado'])
+                    .get();
+                citasArray = citasSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+
+                const bloqueosSnapshot = await firebase.firestore()
+                    .collection('bloqueos')
+                    .where('fecha', '==', fechaStr)
+                    .get();
+                bloqueosArray = bloqueosSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+            }
+
+            actualizarHorariosDisponibles(fecha, citasArray, bloqueosArray);
+            
+            document.getElementById('horarios-section').classList.remove('hidden');
+            document.getElementById('fecha-seleccionada-texto').textContent = 
+                fecha.toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' });
+        }
+        
+        function actualizarHorariosDisponibles(fecha, citas = null, bloqueos = null) {
+            if (!fecha) return;
+            
+            const fechaStr = fecha.toISOString().split('T')[0];
+            
+            // Si no nos pasan datos, podríamos obtenerlos de los listeners (pero aquí ya tenemos los snapshots)
+            // Usamos los parámetros o en su defecto, arrays vacíos
+            let citasArray = citas || [];
+            let bloqueosArray = bloqueos || [];
+            
+            // Horarios predeterminados (9am a 7pm, cada hora)
+            const horariosDisponibles = ['09:00', '10:00', '11:00', '12:00', '14:00', '15:00', '16:00', '17:00'];
+            
+            // Conjunto de horas ocupadas por citas confirmadas o pendientes
+            const horasOcupadasSet = new Set();
+            citasArray.forEach(cita => {
+                if (cita.estado !== 'cancelada') {
+                    horasOcupadasSet.add(cita.hora);
+                }
+            });
+            
+            // Procesar bloqueos: si hay bloqueo completo, todas las horas están ocupadas
+            let bloqueoCompleto = false;
+            bloqueosArray.forEach(bloqueo => {
+                if (bloqueo.tipo === 'completo') {
+                    bloqueoCompleto = true;
+                } else if (bloqueo.tipo === 'parcial') {
+                    // Aquí podrías añadir lógica para bloquear rangos de horas
+                    // Por simplicidad, bloqueamos horas específicas si se guardan como array
+                    if (bloqueo.horas) {
+                        bloqueo.horas.forEach(h => horasOcupadasSet.add(h));
+                    }
+                }
+            });
+            
+            const grid = document.getElementById('horarios-grid');
+            grid.innerHTML = '';
+            
+            horariosDisponibles.forEach(hora => {
+                const btn = document.createElement('button');
+                btn.className = 'time-slot';
+                
+                const ocupado = horasOcupadasSet.has(hora) || bloqueoCompleto;
+                
+                if (ocupado) {
+                    btn.classList.add('ocupado');
+                    btn.disabled = true;
+                    btn.innerHTML = `<span style="text-decoration: line-through;">${hora}</span>`;
+                } else {
+                    btn.innerHTML = `<span style="font-weight: 600;">${hora}</span>`;
+                    btn.onclick = () => selectHora(hora, btn);
+                }
+                
+                if (reservaData.hora === hora) {
+                    btn.classList.add('selected');
+                }
+                
+                grid.appendChild(btn);
+            });
+        }
+        
+        function selectHora(hora, btn) {
+            document.querySelectorAll('.time-slot.selected').forEach(el => {
+                el.classList.remove('selected');
+            });
+            btn.classList.add('selected');
+            reservaData.hora = hora;
+            document.getElementById('btn-continuar-2').disabled = false;
+        }
+        
+        // Método de pago y comprobante (usando firestoreHelper.subirComprobante)
+        function selectMetodoPago(metodo) {
+            reservaData.metodoPago = metodo;
+            
+            document.querySelectorAll('.metodo-pago-card').forEach(el => {
+                el.classList.remove('selected');
+            });
+            document.getElementById(`pago-${metodo}`).classList.add('selected');
+            
+            if (metodo === 'nequi') {
+                document.getElementById('nequi-instructions').classList.remove('hidden');
+                document.getElementById('monto-nequi').textContent = window.firebaseApp.formatCOP(reservaData.precioFinal);
+                document.getElementById('btn-continuar-4').disabled = !(comprobantePendiente || reservaData.comprobanteUrl);
+            } else {
+                document.getElementById('nequi-instructions').classList.add('hidden');
+                document.getElementById('btn-continuar-4').disabled = false;
+            }
+            
+            document.getElementById('total-pagar').textContent = window.firebaseApp.formatCOP(reservaData.precioFinal);
+        }
+        
+        async function handleComprobante(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            // Validar tipo de archivo
+            if (!file.type.startsWith('image/')) {
+                alert('Por favor selecciona una imagen (JPG, PNG)');
+                return;
+            }
+
+            // Validar tamaño (máximo 1MB)
+            if (file.size > 1 * 1024 * 1024) {
+                alert('La imagen es demasiado grande. Máximo 1MB.');
+                return;
+            }
+
+            // Mostrar preview
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                document.getElementById('preview-comprobante').src = e.target.result;
+                document.getElementById('preview-comprobante').classList.remove('hidden');
+                document.getElementById('upload-zone').classList.add('has-file');
+            };
+            reader.readAsDataURL(file);
+
+            // Guardar el archivo para subirlo después
+            comprobantePendiente = file;
+
+            if (reservaData.metodoPago === 'nequi') {
+                document.getElementById('btn-continuar-4').disabled = false;
+            }
+        }
+        
+        async function crearReserva() {
+            const btn = document.getElementById('btn-continuar-4');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="material-symbols-outlined" style="animation: spin 1s linear infinite;">sync</span> Procesando...';
+            
+            try {
+                const fechaStr = reservaData.fecha.toISOString().split('T')[0];
+                
+                const citaData = {
+                    clienteId: currentUser.uid,
+                    clienteNombre: currentUser.displayName,
+                    clienteEmail: currentUser.email,
+                    clienteTelefono: reservaData.telefono,
+                    clienteFoto: currentUser.photoURL,
+                    servicio: reservaData.servicio,
+                    fecha: fechaStr,
+                    hora: reservaData.hora,
+                    fechaHora: new Date(`${fechaStr}T${reservaData.hora}`),
+                    notas: reservaData.notas,
+                    metodoPago: reservaData.metodoPago,
+                    descuentosAplicados: reservaData.descuentos,
+                    precioBase: 25000,
+                    precioFinal: reservaData.precioFinal,
+                    notaPago: document.getElementById('nota-pago').value.trim(),
+                    estado: reservaData.metodoPago === 'nequi' ? 'pendiente_pago' : 'confirmado',
+                    estadoPago: reservaData.metodoPago === 'nequi' ? 'en_revision' : 'pendiente',
+                };
+                
+                // Si es Nequi y hay comprobante pendiente, marcar flag
+                if (reservaData.metodoPago === 'nequi' && comprobantePendiente) {
+                    citaData.tieneComprobante = true;
+                }
+                
+                // Crear la cita
+                const citaRef = await window.firestoreHelper.crearCita(citaData);
+
+                // Si hay comprobante pendiente, guardarlo en Firestore
+                if (comprobantePendiente && citaRef?.id) {
+                    await window.firestoreHelper.guardarComprobanteBase64(
+                        comprobantePendiente,
+                        currentUser.uid,
+                        citaRef.id
+                    );
+                    // Limpiar variable
+                    comprobantePendiente = null;
+                }
+
+                // Actualizar cliente
+                await firebase.firestore().collection('clientes').doc(currentUser.uid).update({
+                    telefono: reservaData.telefono,
+                    ultimaReserva: firebase.firestore.FieldValue.serverTimestamp()
+                });
+
+                mostrarConfirmacion(citaData);
+                
+            } catch (error) {
+                console.error('Error creando reserva:', error);
+                alert('Error al crear reserva. Intenta de nuevo.');
+                btn.disabled = false;
+                btn.innerHTML = 'Continuar';
+            }
+        }
+        
+        function mostrarConfirmacion(citaData) {
+            document.getElementById(`step-${currentStep}`).classList.remove('active');
+            currentStep = 5;
+            document.getElementById(`step-${currentStep}`).classList.add('active');
+            document.getElementById('step-number').textContent = '5';
+            
+            const fecha = new Date(citaData.fechaHora);
+            document.getElementById('confirm-fecha-hora').textContent = 
+                fecha.toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
+            
+            const pagoText = citaData.metodoPago === 'efectivo' 
+                ? `Efectivo (${window.firebaseApp.formatCOP(citaData.precioFinal)} al llegar)`
+                : `Nequi (${window.firebaseApp.formatCOP(citaData.precioFinal)}) - En revisión`;
+            document.getElementById('confirm-pago').textContent = pagoText;
+            
+            if (citaData.metodoPago === 'nequi') {
+                document.getElementById('estado-pago-box').classList.remove('hidden');
+            }
+        }
+    </script>
+</body>
+</html>

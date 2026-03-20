@@ -1,0 +1,152 @@
+@import "tailwindcss";
+
+@theme {
+  --color-accent-primary: oklch(75.52% 0.1283 82.52);
+  --color-accent-primary-hover: oklch(80% 0.14 82);
+  --color-accent-secondary: #8B7344;
+  --color-accent-success: #10b981;
+  --color-accent-error: #ef4444;
+  --color-accent-warning: #f59e0b;
+
+  --color-bg-primary: #050505;
+  --color-bg-secondary: #0a0a0a;
+  --color-bg-tertiary: #161616;
+  --color-bg-card: #121212;
+
+  --color-text-primary: #ffffff;
+  --color-text-secondary: #e5e5e5;
+  --color-text-muted: #a3a3a3;
+  --color-text-subtle: #808080;
+
+  --color-border-subtle: #1a1a1a;
+  --color-border-strong: #333333;
+
+  --font-display: "Playfair Display", serif;
+  --font-body: "Inter", sans-serif;
+}
+
+@layer base {
+  :root {
+    background-color: var(--color-bg-primary);
+    color: var(--color-text-primary);
+    font-family: var(--font-body);
+  }
+
+  /* Light Theme Overrides */
+  [data-theme="light"] {
+    --color-bg-primary: #f8f5f2;
+    --color-bg-secondary: #ffffff;
+    --color-bg-tertiary: #f0ebe1;
+    --color-bg-card: #ffffff;
+
+    --color-text-primary: #1a1a1a;
+    --color-text-secondary: #333333;
+    --color-text-muted: #5a5a5a;
+    --color-text-subtle: #8a8a8a;
+
+    --color-border-subtle: #e5dfd5;
+    --color-border-strong: #cccccc;
+
+    --color-accent-primary: #B58A3F;
+  }
+
+  html,
+  body {
+    @apply m-0 p-0 w-full min-h-screen antialiased overflow-x-hidden;
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
+  }
+
+  /* Hardware Acceleration for all sections and expensive items */
+  section {
+    content-visibility: auto;
+    contain-intrinsic-size: 1px 500px;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.5s ease-out forwards;
+  will-change: opacity;
+  transform: translateZ(0);
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.5s ease-out forwards;
+  will-change: transform, opacity;
+  transform: translateZ(0);
+}
+
+.animate-scale-in {
+  animation: scaleIn 0.3s ease-out forwards;
+  will-change: transform, opacity;
+  transform: translateZ(0);
+}
+
+/* Optimize Mesh Background Performance */
+.mesh-ball {
+  transform: translateZ(0);
+  will-change: transform;
+  backface-visibility: hidden;
+}
+
+/* Optimization for backdrop-blur on low-end devices */
+.backdrop-blur-xl, .backdrop-blur-3xl {
+  will-change: backdrop-filter;
+  transform: translateZ(0);
+}
+
+@keyframes float {
+  0% { transform: translateY(0px) rotate(0deg); }
+  50% { transform: translateY(-30px) rotate(3deg); }
+  100% { transform: translateY(0px) rotate(0deg); }
+}
+.animate-in {
+  animation-duration: 500ms;
+  animation-fill-mode: forwards;
+}
+
+.fade-in {
+  animation-name: fadeIn;
+}
+
+.slide-in-from-bottom-4 {
+  animation-name: fadeInUp;
+}
+
+.zoom-in-95 {
+  animation-name: scaleIn;
+}

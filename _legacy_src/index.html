@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Victorious Studio | El Arte del Barbering</title>
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com"/>
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,300,0,0" rel="stylesheet"/>
+    
+    <!-- Firebase (Global) -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-storage-compat.js"></script>
+    
+    <!-- Modern CSS System -->
+    <link rel="stylesheet" href="src/css/main.css"/>
+    
+    <!-- App Entry Point -->
+    <script type="module" src="src/js/app.js" defer></script>
+</head>
+<body>
+
+    <!-- Header -->
+    <header class="header">
+        <div class="container header-inner">
+            <div class="logo">Victorious<span>Studio</span></div>
+            <div id="auth-section" style="display: flex; align-items: center; gap: 1rem;">
+                <!-- Theme Switcher -->
+                <button onclick="toggleTheme()" class="btn btn-ghost" style="padding: 0.5rem; color: var(--accent-primary);" title="Cambiar Tema">
+                    <span class="material-symbols-outlined">light_mode</span>
+                </button>
+                <!-- Login Button -->
+                <button id="btn-login-header" class="btn btn-primary btn-sm" onclick="openModal('modal-login')">
+                    Log In
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <div id="public-site" class="view-section">
+        <!-- Hero Premium -->
+        <section class="container" style="text-align: center; padding-top: var(--space-3xl); margin-bottom: var(--space-3xl);">
+            <span style="font-size: 0.625rem; text-transform: uppercase; letter-spacing: 0.4em; color: var(--accent-primary); display: block; margin-bottom: 2rem;">
+                San Gil • Est. 2016
+            </span>
+            <h1 style="margin-bottom: 2rem;">
+                El arte del corte<br>
+                <span style="font-style: italic; font-weight: 400; color: var(--accent-primary);">redefinido</span>.
+            </h1>
+            <p style="color: var(--text-muted); max-width: 450px; margin: 0 auto var(--space-2xl); font-size: 1.15rem; line-height: 1.8;">
+                Una experiencia de autor donde cada detalle es esculpido con precisión milimétrica por Victor Méndez.
+            </p>
+            <div style="display: flex; gap: 1rem; justify-content: center;">
+                <a href="#reserva" class="btn btn-primary btn-lg" style="padding: 1rem 2.5rem; letter-spacing: 0.1em; text-decoration: none; display: inline-block;">
+                    Reservar mi Transformación
+                </a>
+            </div>
+        </section>
+
+    <!-- Featured Service -->
+        <section id="servicios" class="container-sm" style="margin-bottom: 6rem;">
+            <!-- Aquí el JS (booking.js) inyectará las tarjetas de servicios públicas (servicesGrid) -->
+            <div id="servicesGrid" style="display: grid; gap: 2rem; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));">
+                <!-- Se llena dinámicamente -->
+            </div>
+        </section>
+
+        <!-- FullCalendar global display -->
+        <section id="disponibilidad" class="container" style="margin-bottom: var(--space-3xl);">
+             <h2 style="font-family: var(--font-display); font-size: 2.5rem; margin-bottom: var(--space-xl); text-align:center;">Nuestra Disponibilidad</h2>
+             <div id="calendar" style="background: var(--bg-card); padding: var(--space-lg); border-radius: 0; border: 1px solid var(--border-subtle); box-shadow: 0 20px 50px rgba(0,0,0,0.8);"></div>
+        </section>
+
+        <!-- Trust Building: Ubicación -->
+        <section id="ubicacion" class="container" style="margin-bottom: var(--space-3xl);">
+            <h2 style="font-family: var(--font-display); font-size: 2.5rem; margin-bottom: var(--space-xl); text-align: center;">Encuéntranos</h2>
+            <div class="map-container" style="border-radius: var(--radius-md); overflow: hidden; border: 1px solid var(--border-subtle); box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+                <iframe 
+                    class="location-map"
+                    src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d15830.402636735518!2d-73.143248443916!3d6.556272365261179!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x8e69c73b06fd70bd%3A0xc3b5ed113d0bae06!2sSan%20Gil%2C%20Santander!5e0!3m2!1sen!2sco!4v1700000000000!5m2!1sen!2sco" 
+                    width="100%" 
+                    height="400" 
+                    style="border:0;" 
+                    allowfullscreen="" 
+                    loading="lazy" 
+                    referrerpolicy="no-referrer-when-downgrade">
+                </iframe>
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <footer class="footer" style="padding-top: var(--space-2xl); padding-bottom: var(--space-2xl); border-top: 1px solid var(--border-subtle);">
+            <div class="container text-center">
+                <h4 style="font-family: var(--font-display); font-size: 1.75rem; margin-bottom: 1rem;">Victorious<span style="color: var(--accent-primary); font-style: italic;">Studio</span></h4>
+                <p style="font-size: 0.75rem; color: var(--accent-primary); text-transform: uppercase; letter-spacing: 0.4em; margin-bottom: 2.5rem;">El estándar de San Gil</p>
+                <p style="color: var(--text-muted); font-size: 0.85rem;">Cra. 9 #11-26 Local 103, Santander</p>
+                <p style="color: var(--text-subtle); margin-top: 3rem; font-size: 0.75rem; letter-spacing: 0.05em;">© 2026 Victorious Studio • El Ritual del Triunfador</p>
+            </div>
+        </footer>
+
+    </div>
+
+    <!-- Reserva Blindada (Dedicated Route) -->
+    <section id="reserva-panel" class="view-section" style="display: none; height: 100vh; background: var(--bg-primary); overflow-y: auto;">
+        <div class="container" style="padding: var(--space-2xl) 0; position: relative;">
+            
+            <!-- Header minimalista / Volver -->
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-xl);">
+                <button class="btn btn-ghost" onclick="cancelBookingNav()" style="display: flex; align-items: center; gap: 0.5rem; color: var(--text-muted); padding: 0.5rem;">
+                    <span class="material-symbols-outlined">arrow_back</span> Volver al inicio
+                </button>
+                <div class="logo" style="font-size: 1.25rem;">Victorious<span style="color: var(--accent-primary); font-style: italic;">Studio</span></div>
+            </div>
+            
+            <div style="text-align: center; margin-bottom: var(--space-xl);">
+                <h2 style="font-family: var(--font-display); font-size: 2.5rem; margin-bottom: 0.5rem;">Tu Transformación</h2>
+                <p style="color: var(--text-muted); font-size: 1.1rem;">Completa estos pasos para asegurar tu espacio de exclusividad.</p>
+            </div>
+
+            <!-- Progress Bar Dorado -->
+            <div style="max-width: 800px; margin: 0 auto var(--space-xl); height: 4px; background: var(--bg-tertiary); border-radius: 2px; overflow: hidden;">
+                <div id="booking-progress-bar" style="width: 25%; height: 100%; background: var(--accent-primary); transition: width 0.4s ease;"></div>
+            </div>
+
+            <div class="booking-flow" style="max-width: 800px; margin: 0 auto; background: var(--bg-card); padding: var(--space-xl); border-radius: var(--radius-md); box-shadow: 0 10px 30px rgba(0,0,0,0.5); border: 1px solid var(--border-subtle);">
+                
+                <!-- Step 1: Servicio -->
+                <div id="step1" class="booking-step active">
+                    <h3 style="margin-bottom: var(--space-lg); border-bottom: 1px solid var(--border-subtle); padding-bottom: var(--space-sm);">1. Selecciona un Servicio</h3>
+                    <div id="step1Services" style="display: grid; gap: 1rem; margin-bottom: var(--space-xl);">
+                        <!-- Llenado por booking.js -->
+                    </div>
+                    <div style="text-align: right;">
+                        <button class="btn btn-primary" onclick="nextStep(2)">Siguiente: Fecha <span class="material-symbols-outlined" style="vertical-align: middle; font-size: 1.2rem;">arrow_forward</span></button>
+                    </div>
+                </div>
+
+                <!-- Step 2: Fecha -->
+                <div id="step2" class="booking-step">
+                    <h3 style="margin-bottom: var(--space-lg); border-bottom: 1px solid var(--border-subtle); padding-bottom: var(--space-sm);">2. Elige el Día</h3>
+                    <div id="datePicker" style="display: flex; gap: 1rem; overflow-x: auto; padding-bottom: 1rem; margin-bottom: var(--space-xl);">
+                        <!-- Llenado por booking.js -->
+                    </div>
+                    <div style="display: flex; justify-content: space-between;">
+                        <button class="btn btn-secondary" onclick="prevStep(1)">Atrás</button>
+                        <button class="btn btn-primary" onclick="nextStep(3)">Siguiente: Hora</button>
+                    </div>
+                </div>
+
+                <!-- Step 3: Hora -->
+                <div id="step3" class="booking-step">
+                    <h3 style="margin-bottom: var(--space-lg); border-bottom: 1px solid var(--border-subtle); padding-bottom: var(--space-sm);">3. Horarios Disponibles</h3>
+                    <div id="timeSlots" style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: var(--space-xl);">
+                        <!-- Llenado por booking.js -->
+                    </div>
+                    <div style="display: flex; justify-content: space-between;">
+                        <button class="btn btn-secondary" onclick="prevStep(2)">Atrás</button>
+                        <button class="btn btn-primary" onclick="nextStep(4)">Siguiente: Tus Datos</button>
+                    </div>
+                </div>
+
+                <!-- Step 4: Datos -->
+                <div id="step4" class="booking-step">
+                    <h3 style="margin-bottom: var(--space-lg); border-bottom: 1px solid var(--border-subtle); padding-bottom: var(--space-sm);">4. Confirma tu Identidad</h3>
+                    <div style="display: grid; gap: 1.5rem; margin-bottom: var(--space-xl);">
+                        <div>
+                            <label style="display: block; margin-bottom: 0.5rem; color: var(--text-secondary);">Nombre Completo *</label>
+                            <input type="text" id="clienteNombre" required style="width: 100%; padding: 0.75rem; background: var(--bg-tertiary); border: 1px solid var(--border-subtle); color: var(--text-primary); border-radius: var(--radius-sm);">
+                        </div>
+                        <div>
+                            <label style="display: block; margin-bottom: 0.5rem; color: var(--text-secondary);">Teléfono (WhatsApp) *</label>
+                            <input type="tel" id="clienteTelefono" required style="width: 100%; padding: 0.75rem; background: var(--bg-tertiary); border: 1px solid var(--border-subtle); color: var(--text-primary); border-radius: var(--radius-sm);">
+                        </div>
+                        <div>
+                            <label style="display: block; margin-bottom: 0.5rem; color: var(--text-secondary);">Email (Opcional)</label>
+                            <input type="email" id="clienteEmail" style="width: 100%; padding: 0.75rem; background: var(--bg-tertiary); border: 1px solid var(--border-subtle); color: var(--text-primary); border-radius: var(--radius-sm);">
+                        </div>
+                    </div>
+                    <div style="display: flex; justify-content: space-between;">
+                        <button class="btn btn-secondary" onclick="prevStep(3)">Atrás</button>
+                        <button class="btn btn-primary" onclick="handleConfirmBooking()" style="background: var(--accent-success); color: white; border: none; letter-spacing: 0.05em;">Finalizar y Reservar</button>
+                    </div>
+                </div>
+
+                <!-- Step 5: Confirmación -->
+                <!-- Step 5: Confirmación -->
+                <div id="step5" class="booking-step" style="text-align: center; padding: var(--space-xl) 0;">
+                    <span class="material-symbols-outlined" style="font-size: 5rem; color: var(--accent-success); margin-bottom: 1.5rem;">check_circle</span>
+                    <h3 style="font-family: var(--font-display); font-size: 2rem; margin-bottom: 1rem;">¡Reserva Confirmada!</h3>
+                    <p style="color: var(--text-muted); margin-bottom: 2rem;">Tu espacio de exclusividad te espera. Serás contactado en breve.</p>
+                    <div id="reservaDetalles" style="margin-bottom: 2rem; display: inline-block;"></div><br/>
+                    <button class="btn btn-secondary" onclick="cancelBookingNav()">Aceptar e ir al Inicio</button>
+                </div>
+
+            </div>
+        </div>
+    </section>
+
+    <!-- Superadmin Panel -->
+    <section id="superadmin-panel" class="view-section" style="display: none; height: 100vh; background: var(--bg-primary);">
+        <div style="display: flex; height: 100%;">
+            <!-- Sidebar -->
+            <aside id="adminSidebar" class="admin-sidebar" style="width: 250px; background: var(--bg-secondary); border-right: 1px solid var(--border-subtle); display: flex; flex-direction: column;">
+                <div style="padding: var(--space-xl) var(--space-lg); border-bottom: 1px solid var(--border-subtle); display: flex; align-items: center; justify-content: space-between;">
+                    <div style="font-family: var(--font-display); font-size: 1.25rem; font-weight: bold;">Victorious<span style="color: var(--accent-primary);">Admin</span></div>
+                    <button id="adminMenuToggle" class="btn btn-ghost" style="padding: 0.5rem; display: none;">
+                        <span class="material-symbols-outlined">menu</span>
+                    </button>
+                </div>
+                
+                <div style="padding: var(--space-lg); border-bottom: 1px solid var(--border-subtle); display: flex; align-items: center; gap: 1rem;">
+                    <div id="userAvatar" style="width: 40px; height: 40px; border-radius: 50%; background: var(--accent-primary); color: var(--bg-primary); display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 1.25rem;">A</div>
+                    <div>
+                        <div id="userName" style="font-weight: 600; font-size: 0.95rem;">Admin</div>
+                        <div style="font-size: 0.75rem; color: var(--text-muted);">Super Administrador</div>
+                    </div>
+                </div>
+
+                <nav class="admin-menu" style="flex: 1; padding: var(--space-lg); display: flex; flex-direction: column; gap: 0.5rem;">
+                    <a href="#" class="active" onclick="showAdminSection('dashboard')" style="display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 1rem; color: var(--text-primary); text-decoration: none; border-radius: var(--radius-sm); transition: all 0.2s;">
+                        <span class="material-symbols-outlined">dashboard</span> Dashboard
+                    </a>
+                    <a href="#" onclick="showAdminSection('reservas')" style="display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 1rem; color: var(--text-primary); text-decoration: none; border-radius: var(--radius-sm); transition: all 0.2s;">
+                        <span class="material-symbols-outlined">calendar_month</span> Reservas
+                    </a>
+                    <a href="#" onclick="showAdminSection('clientes')" style="display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 1rem; color: var(--text-primary); text-decoration: none; border-radius: var(--radius-sm); transition: all 0.2s;">
+                        <span class="material-symbols-outlined">groups</span> Clientes
+                    </a>
+                    <a href="#" onclick="showAdminSection('servicios')" style="display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 1rem; color: var(--text-primary); text-decoration: none; border-radius: var(--radius-sm); transition: all 0.2s;">
+                        <span class="material-symbols-outlined">cut</span> Servicios
+                    </a>
+                    <a href="#" onclick="showAdminSection('horarios')" style="display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 1rem; color: var(--text-primary); text-decoration: none; border-radius: var(--radius-sm); transition: all 0.2s;">
+                        <span class="material-symbols-outlined">schedule</span> Horarios
+                    </a>
+                    <a href="#" onclick="showAdminSection('configuracion')" style="display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 1rem; color: var(--text-primary); text-decoration: none; border-radius: var(--radius-sm); transition: all 0.2s;">
+                        <span class="material-symbols-outlined">settings</span> Configuración
+                    </a>
+                </nav>
+
+                <div style="padding: var(--space-lg); border-top: 1px solid var(--border-subtle);">
+                    <button class="btn btn-secondary btn-block" onclick="logout()" style="display: flex; align-items: center; justify-content: center; gap: 0.5rem;">
+                        <span class="material-symbols-outlined">logout</span> Cerrar Sesión
+                    </button>
+                </div>
+            </aside>
+
+            <!-- Main Content -->
+            <main style="flex: 1; overflow-y: auto; padding: var(--space-xl);">
+                <header style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+                    <div>
+                        <h2 id="welcomeMessage" style="font-family: var(--font-display); font-size: 2rem;">Panel de Control</h2>
+                        <p style="color: var(--text-muted);">Bienvenido a la administración de Victorious Studio.</p>
+                    </div>
+                </header>
+
+                <!-- Secciones del Panel -->
+                <div id="admin-dashboard" class="admin-section">
+                    <!-- Dashboard simplificado, JS inyectará el contenido luego -->
+                    <div style="padding:2rem; text-align:center; color: var(--text-muted); border: 1px dashed var(--border-subtle);">Panel de SuperAdmin Activo</div>
+                </div>
+            </main>
+        </div>
+    </section>
+
+    <!-- Admin Panel (Barber) -->
+    <section id="admin-panel" class="view-section" style="display: none; height: 100vh; background: var(--bg-primary);">
+        <div style="display: flex; height: 100%;">
+            <!-- Sidebar -->
+            <aside id="barberSidebar" class="barber-sidebar" style="width: 250px; background: var(--bg-secondary); border-right: 1px solid var(--border-subtle); display: flex; flex-direction: column;">
+                 <div style="padding: var(--space-xl) var(--space-lg); border-bottom: 1px solid var(--border-subtle); display: flex; align-items: center; justify-content: space-between;">
+                    <div style="font-family: var(--font-display); font-size: 1.25rem; font-weight: bold;">Mi <span style="color: var(--accent-primary);">Agenda</span></div>
+                </div>
+                <div style="padding: var(--space-lg); border-bottom: 1px solid var(--border-subtle); display: flex; align-items: center; gap: 1rem;">
+                    <div>
+                        <div id="barberName" style="font-weight: 600; font-size: 0.95rem;">Barbero</div>
+                    </div>
+                </div>
+                <nav class="admin-menu" style="flex: 1; padding: var(--space-lg); display: flex; flex-direction: column; gap: 0.5rem;">
+                    <a href="#" class="active" onclick="showBarberSection('reservas')" style="display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 1rem; color: var(--text-primary); text-decoration: none; border-radius: var(--radius-sm); transition: all 0.2s;">
+                        <span class="material-symbols-outlined">calendar_today</span> Mis Citas Hoy
+                    </a>
+                </nav>
+                <div style="padding: var(--space-lg); border-top: 1px solid var(--border-subtle);">
+                    <button class="btn btn-secondary btn-block" onclick="logout()" style="display: flex; align-items: center; justify-content: center; gap: 0.5rem;">
+                        <span class="material-symbols-outlined">logout</span> Cerrar Sesión
+                    </button>
+                </div>
+            </aside>
+
+            <!-- Main Content -->
+            <main style="flex: 1; overflow-y: auto; padding: var(--space-xl);">
+                <header style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+                    <div>
+                        <h2 id="barberWelcome" style="font-family: var(--font-display); font-size: 2rem;">Mi Agenda</h2>
+                    </div>
+                </header>
+                <div id="barber-reservas" class="admin-section">
+                    <div style="padding:2rem; text-align:center; color: var(--text-muted); border: 1px dashed var(--border-subtle);">Panel de Barbero Activo</div>
+                </div>
+            </main>
+        </div>
+    </section>
+
+    <!-- Login Modal -->
+    <div id="modal-login" class="modal-overlay">
+        <div class="modal-content">
+            <span class="material-symbols-outlined" style="position: absolute; right: 24px; top: 24px; cursor: pointer; color: var(--text-muted);" onclick="closeModal('modal-login')">close</span>
+            <span class="material-symbols-outlined" style="font-size: 3rem; margin-bottom: 1rem; color: var(--accent-primary);">account_circle</span>
+            <h3 style="font-family: var(--font-display); font-size: 1.75rem; margin-bottom: 0.5rem;">Inicia Sesión</h3>
+            <p style="font-size: 0.95rem; color: var(--text-muted); margin-bottom: 2rem;">
+                Accede a tu cuenta de administración.
+            </p>
+            <form id="loginForm">
+                <input type="text" id="username" placeholder="Usuario" required style="width: 100%; padding: 0.75rem; margin-bottom: 1rem; background: var(--bg-tertiary); border: 1px solid var(--border-subtle); color: white; border-radius: var(--radius-sm);">
+                <input type="password" id="password" placeholder="Contraseña" required style="width: 100%; padding: 0.75rem; margin-bottom: 1.5rem; background: var(--bg-tertiary); border: 1px solid var(--border-subtle); color: white; border-radius: var(--radius-sm);">
+                <div id="loginError" style="color: var(--accent-error); font-size: 0.85rem; margin-bottom: 1rem; display: none;">Credenciales incorrectas</div>
+                <button type="submit" class="btn btn-primary btn-block">
+                    Iniciar Sesión
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Scripts externos -->
+    <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js"></script>
+
+
+</body>
+</html>

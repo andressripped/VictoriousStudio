@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Descuentos | Victorious Studio</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,300,0,0" rel="stylesheet">
+    
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    
+    <script src="../js/firebase-config.js"></script>
+    <link rel="stylesheet" href="../styles/main.css">
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <button class="btn btn-ghost" onclick="history.back()">
+                <span class="material-symbols-outlined">arrow_back</span>
+            </button>
+            <h1 style="font-family: var(--font-display); font-size: 1.25rem;">Descuentos</h1>
+            <button class="btn btn-primary btn-sm" onclick="mostrarFormNuevo()">
+                <span class="material-symbols-outlined">add</span>
+                Nuevo
+            </button>
+        </div>
+    </header>
+
+    <main class="container" style="padding-top: 100px; padding-bottom: 100px;">
+        
+        <!-- Tabs -->
+        <div style="display: flex; gap: 0.5rem; margin-bottom: 1.5rem; overflow-x: auto;">
+            <button class="btn btn-secondary btn-sm active" id="tab-activos" onclick="cambiarTab('activos')">Activos</button>
+            <button class="btn btn-ghost btn-sm" id="tab-todos" onclick="cambiarTab('todos')">Todos</button>
+            <button class="btn btn-ghost btn-sm" id="tab-expirados" onclick="cambiarTab('expirados')">Expirados</button>
+        </div>
+        
+        <!-- Lista descuentos -->
+        <div id="descuentos-lista" style="display: flex; flex-direction: column; gap: 1rem;">
+            <!-- Generado dinámicamente -->
+        </div>
+        
+        <!-- Modal formulario -->
+        <div id="modal-descuento" class="hidden" style="position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 200; overflow-y: auto;">
+            <div class="container" style="padding-top: 2rem; padding-bottom: 2rem;">
+                <div class="card" style="max-width: 480px; margin: 0 auto;">
+                    <div style="padding: 1.5rem; border-bottom: 1px solid var(--border-subtle); display: flex; justify-content: space-between; align-items: center;">
+                        <h2 style="font-family: var(--font-display); font-size: 1.25rem;">Nuevo Descuento</h2>
+                        <button class="btn btn-ghost" onclick="cerrarModal()">
+                            <span class="material-symbols-outlined">close</span>
+                        </button>
+                    </div>
+                    
+                    <form id="form-descuento" style="padding: 1.5rem;">
+                        <!-- Código -->
+                        <div class="form-group">
+                            <label class="form-label">Código del cupón</label>
+                            <div style="display: flex; gap: 0.5rem;">
+                                <input type="text" class="form-input" id="desc-codigo" required placeholder="VICTOR20" style="text-transform: uppercase;">
+                                <button type="button" class="btn btn-secondary" onclick="generarCodigo()">
+                                    <span class="material-symbols-outlined">shuffle</span>
+                                </button>
+                            </div>
+                            <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.5rem;">El cliente ingresa este código al pagar</p>
+                        </div>
+                        
+                        <!-- Tipo y valor -->
+                        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem;">
+                            <div class="form-group">
+                                <label class="form-label">Tipo</label>
+                                <select class="form-select" id="desc-tipo" required>
+                                    <option value="porcentaje">Porcentaje (%)</option>
+                                    <option value="fijo">Monto fijo ($)</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Valor</label>
+                                <input type="number" class="form-input" id="desc-valor" required placeholder="20">
+                            </div>
+                        </div>
+                        
+                        <!-- Aplicación -->
+                        <div class="form-group">
+                            <label class="form-label">Aplicar a</label>
+                            <select class="form-select" id="desc-aplicacion" required>
+                                <option value="todos">Todos los clientes</option>
+                                <option value="especifico">Cliente específico</option>
+                                <option value="primera_vez">Primera reserva</option>
+                            </select>
+                        </div>
+                        
+                        <div id="cliente-especifico-field" class="form-group hidden">
+                            <label class="form-label">Email del cliente</label>
+                            <input type="email" class="form-input" id="desc-cliente-email" placeholder="cliente@email.com">
+                        </div>
+                        
+                        <!-- Límites -->
+                        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem;">
+                            <div class="form-group">
+                                <label class="form-label">Usos máximos</label>
+                                <input type="number" class="form-input" id="desc-usos-max" value="100" min="1">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Válido hasta</label>
+                                <input type="date" class="form-input" id="desc-fecha-fin">
+                            </div>
+                        </div>
+                        
+                        <!-- Acumulable -->
+                        <div class="form-group">
+                            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                                <input type="checkbox" id="desc-acumulable" checked>
+                                <span style="font-size: 0.875rem;">Acumulable con otros descuentos</span>
+                            </label>
+                        </div>
+                        
+                        <div style="display: flex; gap: 1rem; margin-top: 2rem;">
+                            <button type="button" class="btn btn-secondary btn-block" onclick="cerrarModal()">Cancelar</button>
+                            <button type="submit" class="btn btn-primary btn-block">Crear Descuento</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+    </main>
+
+    <!-- Bottom Nav -->
+    <div class="bottom-nav">
+        <div class="bottom-nav-content">
+            <button class="nav-item" onclick="window.location.href='panel.html'">
+                <span class="material-symbols-outlined">dashboard</span>
+                Panel
+            </button>
+            <button class="nav-item" onclick="window.location.href='citas.html'">
+                <span class="material-symbols-outlined">calendar_today</span>
+                Agenda
+            </button>
+            <button class="nav-fab" onclick="mostrarFormNuevo()">
+                <span class="material-symbols-outlined">add</span>
+            </button>
+            <button class="nav-item" onclick="window.location.href='productos.html'">
+                <span class="material-symbols-outlined">inventory_2</span>
+                Tienda
+            </button>
+            <button class="nav-item" onclick="window.location.href='../../index.html'">
+                <span class="material-symbols-outlined">storefront</span>
+                Web
+            </button>
+        </div>
+    </div>
+
+    <script>
+        let descuentos = [];
+        let tabActual = 'activos';
+        
+        firebase.auth().onAuthStateChanged((user) => {
+            if (!user) {
+                window.location.href = '../../index.html';
+                return;
+            }
+            cargarDescuentos();
+        });
+        
+        async function cargarDescuentos() {
+            const snapshot = await firebase.firestore()
+                .collection('descuentos')
+                .orderBy('creadoEn', 'desc')
+                .get();
+            
+            descuentos = [];
+            snapshot.forEach(doc => {
+                const d = doc.data();
+                d.id = doc.id;
+                descuentos.push(d);
+            });
+            
+            renderDescuentos();
+        }
+        
+        function renderDescuentos() {
+            const lista = document.getElementById('descuentos-lista');
+            lista.innerHTML = '';
+            
+            const hoy = new Date();
+            
+            const filtrados = descuentos.filter(d => {
+                const activo = d.activo && (!d.fechaFin || new Date(d.fechaFin) >= hoy) && d.usosActuales < d.usosMax;
+                const expirado = !activo || d.usosActuales >= d.usosMax || (d.fechaFin && new Date(d.fechaFin) < hoy);
+                
+                if (tabActual === 'activos') return activo;
+                if (tabActual === 'expirados') return expirado;
+                return true;
+            });
+            
+            if (filtrados.length === 0) {
+                lista.innerHTML = `
+                    <div style="text-align: center; padding: 3rem; color: var(--text-muted);">
+                        <span class="material-symbols-outlined" style="font-size: 3rem; margin-bottom: 1rem;">local_offer</span>
+                        <p>No hay descuentos ${tabActual === 'activos' ? 'activos' : 'en esta categoría'}</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            filtrados.forEach(d => {
+                const usosRestantes = d.usosMax - d.usosActuales;
+                const porcentajeUso = (d.usosActuales / d.usosMax) * 100;
+                
+                const div = document.createElement('div');
+                div.className = 'card';
+                div.innerHTML = `
+                    <div style="padding: 1.25rem;">
+                        <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.75rem;">
+                            <div>
+                                <span style="font-size: 1.5rem; font-weight: 700; letter-spacing: 0.05em;">${d.codigo}</span>
+                                <span class="badge ${d.tipo === 'porcentaje' ? 'badge-confirmado' : 'badge-revision'}" style="margin-left: 0.5rem;">
+                                    ${d.tipo === 'porcentaje' ? d.valor + '%' : '$' + d.valor}
+                                </span>
+                            </div>
+                            <button class="btn btn-ghost btn-sm" onclick="desactivarDescuento('${d.id}')">
+                                <span class="material-symbols-outlined">close</span>
+                            </button>
+                        </div>
+                        
+                        <p style="font-size: 0.875rem; color: var(--text-muted); margin-bottom: 0.75rem;">
+                            ${d.aplicacion === 'todos' ? 'Todos los clientes' : 
+                              d.aplicacion === 'primera_vez' ? 'Primera reserva' : 
+                              'Cliente: ' + d.clienteEmail}
+                        </p>
+                        
+                        <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+                            <div style="flex: 1; height: 4px; background: var(--bg-tertiary); border-radius: var(--radius-full); overflow: hidden;">
+                                <div style="width: ${porcentajeUso}%; height: 100%; background: ${porcentajeUso > 80 ? 'var(--accent-danger)' : 'var(--accent-success)'}; border-radius: var(--radius-full);"></div>
+                            </div>
+                            <span style="font-size: 0.75rem; color: var(--text-muted);">${d.usosActuales}/${d.usosMax}</span>
+                        </div>
+                        
+                        <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-muted);">
+                            <span>${d.acumulable ? '✓ Acumulable' : 'No acumulable'}</span>
+                            ${d.fechaFin ? `<span>Expira: ${new Date(d.fechaFin).toLocaleDateString('es-CO')}</span>` : '<span>Sin expiración</span>'}
+                        </div>
+                    </div>
+                `;
+                lista.appendChild(div);
+            });
+        }
+        
+        function cambiarTab(tab) {
+            tabActual = tab;
+            document.querySelectorAll('[id^="tab-"]').forEach(btn => {
+                btn.classList.remove('btn-secondary', 'active');
+                btn.classList.add('btn-ghost');
+            });
+            document.getElementById(`tab-${tab}`).classList.remove('btn-ghost');
+            document.getElementById(`tab-${tab}`).classList.add('btn-secondary', 'active');
+            renderDescuentos();
+        }
+        
+        function mostrarFormNuevo() {
+            document.getElementById('form-descuento').reset();
+            document.getElementById('modal-descuento').classList.remove('hidden');
+        }
+        
+        function generarCodigo() {
+            const codigo = 'VIC' + Math.random().toString(36).substring(2, 6).toUpperCase();
+            document.getElementById('desc-codigo').value = codigo;
+        }
+        
+        document.getElementById('desc-aplicacion').addEventListener('change', (e) => {
+            const especifico = e.target.value === 'especifico';
+            document.getElementById('cliente-especifico-field').classList.toggle('hidden', !especifico);
+        });
+        
+        document.getElementById('form-descuento').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const data = {
+                codigo: document.getElementById('desc-codigo').value.toUpperCase(),
+                tipo: document.getElementById('desc-tipo').value,
+                valor: parseInt(document.getElementById('desc-valor').value),
+                aplicacion: document.getElementById('desc-aplicacion').value,
+                usosMax: parseInt(document.getElementById('desc-usos-max').value),
+                usosActuales: 0,
+                acumulable: document.getElementById('desc-acumulable').checked,
+                activo: true,
+                creadoEn: firebase.firestore.FieldValue.serverTimestamp()
+            };
+            
+            if (data.aplicacion === 'especifico') {
+                data.clienteEmail = document.getElementById('desc-cliente-email').value;
+            }
+            
+            const fechaFin = document.getElementById('desc-fecha-fin').value;
+            if (fechaFin) data.fechaFin = fechaFin;
+            
+            try {
+                await firebase.firestore().collection('descuentos').add(data);
+                cerrarModal();
+                cargarDescuentos();
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error al crear descuento. Intenta de nuevo.');
+            }
+        });
+        
+        async function desactivarDescuento(id) {
+            if (!confirm('¿Desactivar este descuento?')) return;
+            
+            await firebase.firestore().collection('descuentos').doc(id).update({
+                activo: false,
+                desactivadoEn: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            
+            cargarDescuentos();
+        }
+        
+        function cerrarModal() {
+            document.getElementById('modal-descuento').classList.add('hidden');
+        }
+    </script>
+</body>
+</html>

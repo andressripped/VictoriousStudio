@@ -1,0 +1,66 @@
+/* src/css/layout.css */
+.container {
+    width: 100%;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 var(--space-md);
+}
+
+.container-sm {
+    width: 100%;
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 0 var(--space-md);
+}
+
+.header {
+    background: rgba(10, 10, 10, 0.85);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.header-inner {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    height: 80px;
+}
+
+.logo {
+    font-family: var(--font-display);
+    font-size: 1.75rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: var(--text-primary);
+}
+
+.logo span {
+    color: var(--accent-primary);
+    font-style: italic;
+}
+
+.footer {
+    background: var(--bg-secondary);
+    border-top: 1px solid var(--border-subtle);
+    padding: var(--space-2xl) 0;
+    margin-top: auto;
+}
+
+/* Admin Layouts */
+.view-section {
+    animation: fadeIn 0.4s ease forwards;
+}
+
+.admin-menu a.active {
+    background: var(--accent-primary);
+    color: var(--bg-primary) !important;
+    font-weight: 600;
+}
+.admin-menu a:hover:not(.active) {
+    background: var(--bg-tertiary);
+    color: var(--accent-primary) !important;
+}

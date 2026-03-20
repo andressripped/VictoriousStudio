@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agenda Completa | Victorious Studio</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,300,0,0" rel="stylesheet">
+    
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    
+    <script src="../js/firebase-config.js"></script>
+    <link rel="stylesheet" href="../styles/main.css">
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <button class="btn btn-ghost" onclick="history.back()">
+                <span class="material-symbols-outlined">arrow_back</span>
+            </button>
+            <h1 style="font-family: var(--font-display); font-size: 1.25rem;">Agenda</h1>
+            <button class="btn btn-ghost" onclick="logout()">
+                <span class="material-symbols-outlined">logout</span>
+            </button>
+        </div>
+    </header>
+
+    <main class="container" style="padding-top: 100px; padding-bottom: 100px;">
+        
+        <!-- Filtros -->
+        <div style="display: flex; gap: 0.5rem; margin-bottom: 1.5rem; overflow-x: auto;">
+            <button class="btn btn-secondary btn-sm active" onclick="filtrar('todas')">Todas</button>
+            <button class="btn btn-ghost btn-sm" onclick="filtrar('hoy')">Hoy</button>
+            <button class="btn btn-ghost btn-sm" onclick="filtrar('semana')">Esta semana</button>
+            <button class="btn btn-ghost btn-sm" onclick="filtrar('pendientes')">Pendientes</button>
+        </div>
+        
+        <!-- Lista citas -->
+        <div id="citas-lista">
+            <p style="text-align: center; color: var(--text-muted); padding: 2rem;">Cargando...</p>
+        </div>
+        
+    </main>
+
+    <!-- Bottom Nav -->
+    <div class="bottom-nav">
+        <div class="bottom-nav-content">
+            <button class="nav-item" onclick="window.location.href='panel.html'">
+                <span class="material-symbols-outlined">dashboard</span>
+                Panel
+            </button>
+            <button class="nav-item active" onclick="window.location.href='citas.html'">
+                <span class="material-symbols-outlined">calendar_today</span>
+                Agenda
+            </button>
+            <button class="nav-fab" onclick="crearCitaManual()">
+                <span class="material-symbols-outlined">add</span>
+            </button>
+            <button class="nav-item" onclick="window.location.href='productos.html'">
+                <span class="material-symbols-outlined">inventory_2</span>
+                Tienda
+            </button>
+            <button class="nav-item" onclick="window.location.href='../../index.html'">
+                <span class="material-symbols-outlined">storefront</span>
+                Web
+            </button>
+        </div>
+    </div>
+
+    <script>
+        let todasLasCitas = [];
+        let filtroActual = 'todas';
+        
+        firebase.auth().onAuthStateChanged((user) => {
+            if (!user) {
+                window.location.href = '../../index.html';
+                return;
+            }
+            cargarCitas();
+        });
+        
+        async function cargarCitas() {
+            const snapshot = await firebase.firestore()
+                .collection('citas')
+                .orderBy('fechaHora', 'desc')
+                .limit(100)
+                .get();
+            
+            todasLasCitas = [];
+            snapshot.forEach(doc => {
+                const cita = doc.data();
+                cita.id = doc.id;
+                todasLasCitas.push(cita);
+            });
+            
+            aplicarFiltro();
+        }
+        
+        function filtrar(tipo) {
+            filtroActual = tipo;
+            
+            // Actualizar botones
+            document.querySelectorAll('.btn-sm').forEach(btn => {
+                btn.classList.remove('btn-secondary', 'active');
+                btn.classList.add('btn-ghost');
+            });
+            event.target.classList.remove('btn-ghost');
+            event.target.classList.add('btn-secondary', 'active');
+            
+            aplicarFiltro();
+        }
+        
+        function aplicarFiltro() {
+            const hoy = new Date();
+            hoy.setHours(0, 0, 0, 0);
+            
+            const finSemana = new Date(hoy);
+            finSemana.setDate(finSemana.getDate() + 7);
+            
+            let filtradas = todasLasCitas;
+            
+            if (filtroActual === 'hoy') {
+                const hoyStr = hoy.toISOString().split('T')[0];
+                filtradas = todasLasCitas.filter(c => c.fecha === hoyStr);
+            } else if (filtroActual === 'semana') {
+                filtradas = todasLasCitas.filter(c => {
+                    const fecha = new Date(c.fecha);
+                    return fecha >= hoy && fecha <= finSemana;
+                });
+            } else if (filtroActual === 'pendientes') {
+                filtradas = todasLasCitas.filter(c => 
+                    c.estado === 'pendiente_pago' || c.estadoPago === 'en_revision'
+                );
+            }
+            
+            renderCitas(filtradas);
+        }
+        
+        function renderCitas(citas) {
+            const container = document.getElementById('citas-lista');
+            
+            if (citas.length === 0) {
+                container.innerHTML = '<p style="text-align: center; color: var(--text-muted); padding: 3rem;">No hay citas</p>';
+                return;
+            }
+            
+            container.innerHTML = '';
+            
+            // Agrupar por fecha
+            const porFecha = {};
+            citas.forEach(c => {
+                if (!porFecha[c.fecha]) porFecha[c.fecha] = [];
+                porFecha[c.fecha].push(c);
+            });
+            
+            Object.keys(porFecha).sort().forEach(fecha => {
+                const fechaDiv = document.createElement('div');
+                fechaDiv.style.marginBottom = '2rem';
+                
+                const fechaObj = new Date(fecha);
+                const esHoy = fecha === new Date().toISOString().split('T')[0];
+                
+                fechaDiv.innerHTML = `
+                    <h3 style="font-size: 0.875rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); margin-bottom: 1rem;">
+                        ${esHoy ? 'HOY - ' : ''}${fechaObj.toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })}
+                    </h3>
+                `;
+                
+                const citasDiv = document.createElement('div');
+                porFecha[fecha].forEach(cita => {
+                    citasDiv.appendChild(crearCitaCard(cita));
+                });
+                
+                fechaDiv.appendChild(citasDiv);
+                container.appendChild(fechaDiv);
+            });
+        }
+        
+        function crearCitaCard(cita) {
+            const div = document.createElement('div');
+            div.className = 'card';
+            div.style.marginBottom = '1rem';
+            
+            const estadoColors = {
+                confirmado: 'var(--accent-success)',
+                pendiente_pago: 'var(--accent-warning)',
+                completado: 'var(--accent-info)',
+                cancelada: 'var(--accent-danger)'
+            };
+            
+            div.innerHTML = `
+                <div style="padding: 1.25rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: start;">
+                        <div style="display: flex; gap: 1rem;">
+                            <img src="${cita.clienteFoto || 'https://via.placeholder.com/40'}" 
+                                 style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover;">
+                            <div>
+                                <h4 style="font-weight: 600;">${cita.clienteNombre}</h4>
+                                <p style="font-size: 0.875rem; color: var(--text-muted);">${cita.hora} • ${cita.servicio.nombre}</p>
+                                <p style="font-size: 0.75rem; color: ${estadoColors[cita.estado] || 'var(--text-muted)'}; margin-top: 0.25rem;">
+                                    ${cita.estado.toUpperCase()} ${cita.estadoPago ? `• ${cita.estadoPago.replace('_', ' ').toUpperCase()}` : ''}
+                                </p>
+                            </div>
+                        </div>
+                        <span style="font-weight: 700;">${window.firebaseApp.formatCOP(cita.precioFinal)}</span>
+                    </div>
+                    
+                    <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
+                        ${cita.estado !== 'completado' && cita.estado !== 'cancelada' ? `
+                            <button class="btn btn-success btn-sm" onclick="completarCita('${cita.id}')">
+                                <span class="material-symbols-outlined">check</span>
+                            </button>
+                        ` : ''}
+                        <a href="https://wa.me/57${cita.clienteTelefono.replace(/\D/g, '')}" 
+                           class="btn btn-secondary btn-sm" style="text-decoration: none;">
+                            <span class="material-symbols-outlined">chat</span>
+                        </a>
+                        ${cita.estado !== 'cancelada' ? `
+                            <button class="btn btn-danger btn-sm" onclick="cancelarCita('${cita.id}')">
+                                <span class="material-symbols-outlined">close</span>
+                            </button>
+                        ` : ''}
+                    </div>
+                </div>
+            `;
+            
+            return div;
+        }
+        
+        async function completarCita(citaId) {
+            if (!confirm('¿Marcar como completada?')) return;
+            
+            await firebase.firestore().collection('citas').doc(citaId).update({
+                estado: 'completado',
+                completadaEn: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            
+            cargarCitas();
+        }
+        
+        async function cancelarCita(citaId) {
+            if (!confirm('¿Cancelar esta cita?')) return;
+            
+            await firebase.firestore().collection('citas').doc(citaId).update({
+                estado: 'cancelada',
+                canceladaEn: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            
+            cargarCitas();
+        }
+        
+        function crearCitaManual() {
+            alert('Función: Crear cita manual (implementar formulario)');
+        }
+        
+        function logout() {
+            firebase.auth().signOut();
+        }
+    </script>
+</body>
+</html>

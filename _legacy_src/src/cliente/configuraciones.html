@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Configuraciones | Victorious Studio</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,300,0,0" rel="stylesheet">
+    
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    
+    <script src="../js/firebase-config.js"></script>
+    <script type="module" src="../components/menu.js"></script>
+    <script type="module" src="../components/auth.js"></script>
+    <script type="module" src="../components/configuraciones.js"></script>
+    <link rel="stylesheet" href="../styles/main.css">
+    <link rel="stylesheet" href="../components/ui.css">
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content" style="display:flex; align-items:center; justify-content:space-between;">
+            <div style="display:flex; align-items:center; gap:1rem;">
+                <button class="btn btn-ghost" onclick="window.location.href='perfil.html'">
+                    <span class="material-symbols-outlined">arrow_back</span>
+                </button>
+                <h1 style="font-family: var(--font-display); font-size: 1.25rem;">Configuraciones</h1>
+            </div>
+            <div id="auth-section" style="display:flex; align-items:center; gap:0.5rem;"></div>
+        </div>
+    </header>
+
+    <main class="container" style="padding-top: 100px; padding-bottom: 100px;">
+        <section id="config-section"></section>
+    </main>
+
+    <script>
+        let currentUser = null;
+
+        function updateHeaderAuth(user) {
+            const authSection = document.getElementById('auth-section');
+            if (!authSection) return;
+            if (user) {
+                authSection.innerHTML = `
+                    <div class="profile-container">
+                        <img src="${user.photoURL}" id="profile-avatar" class="profile-avatar" alt="Avatar">
+                        <div class="profile-menu" id="profile-menu">
+                            <a href="/perfil">Mi perfil</a>
+                            <a href="/configuraciones">Configuraciones</a>
+                            <a href="#" onclick="logout()">Cerrar sesión</a>
+                        </div>
+                    </div>
+                `;
+                window.initProfileMenu && window.initProfileMenu();
+            } else {
+                authSection.innerHTML = '';
+            }
+        }
+
+        firebase.auth().onAuthStateChanged(async (user) => {
+            if (!user) {
+                window.location.href = '../../index.html';
+                return;
+            }
+            currentUser = user;
+            updateHeaderAuth(user);
+
+            // cargar preferencias existentes
+            const doc = await firebase.firestore().collection('clientes').doc(user.uid).get();
+            const data = doc.data() || {};
+            const prefs = data.prefs || {};
+            document.getElementById('pref-nombre').value = prefs.nombreMostrar || user.displayName || '';
+            document.getElementById('pref-tema').value = prefs.tema || (document.documentElement.getAttribute('data-theme') || 'dark');
+            document.getElementById('pref-mensaje').value = prefs.mensaje || '';
+        });
+
+        document.getElementById('settings-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const nombre = document.getElementById('pref-nombre').value.trim();
+            const tema = document.getElementById('pref-tema').value;
+            const mensaje = document.getElementById('pref-mensaje').value.trim();
+
+            // aplicar tema inmediatamente
+            document.documentElement.setAttribute('data-theme', tema);
+            localStorage.setItem('theme', tema);
+
+            try {
+                const updates = { prefs: { nombreMostrar: nombre, tema, mensaje } };
+                if (nombre && currentUser && nombre !== currentUser.displayName) {
+                    await currentUser.updateProfile({ displayName: nombre });
+                }
+                await firebase.firestore().collection('clientes').doc(currentUser.uid).update(updates);
+                // refrescar cabecera si el nombre cambió
+                updateHeaderAuth(currentUser);
+                alert('Preferencias guardadas');
+            } catch (err) {
+                console.error('Error guardando preferencias', err);
+                alert('Error guardando preferencias');
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel de Control | Victorious Studio</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,300,0,0" rel="stylesheet">
+    
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-storage-compat.js"></script>
+    
+    <script src="../js/firebase-config.js"></script>
+    <script src="../js/firestore.js"></script>
+    <link rel="stylesheet" href="../styles/main.css">
+    
+    <style>
+        .stat-card { background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: 1.25rem; transition: all 0.3s ease; }
+        .stat-card:hover { border-color: var(--border-medium); transform: translateY(-2px); }
+        .stat-value { font-size: 2rem; font-weight: 700; margin-top: 0.5rem; }
+        .stat-label { font-size: 0.625rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); }
+        
+        .cita-card { background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: 1.25rem; margin-bottom: 1rem; transition: all 0.3s ease; }
+        .cita-card:hover { border-color: var(--border-medium); }
+        
+        .quick-action { display: flex; align-items: center; gap: 0.75rem; padding: 1rem; background: var(--bg-tertiary); border-radius: var(--radius-md); cursor: pointer; transition: all 0.2s ease; }
+        .quick-action:hover { background: var(--bg-hover); }
+        
+        .notification-dot { position: absolute; top: -2px; right: -2px; width: 8px; height: 8px; background: var(--accent-danger); border-radius: 50%; border: 2px solid var(--bg-primary); }
+        
+        .bloqueo-item { display: flex; justify-content: space-between; align-items: center; padding: 0.75rem; background: var(--bg-tertiary); border-radius: var(--radius-md); margin-bottom: 0.5rem; }
+        
+        .modal { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); align-items: center; justify-content: center; z-index: 1000; }
+        .modal.active { display: flex; }
+        .modal-content { background: var(--bg-card); border-radius: var(--radius-lg); padding: 1.5rem; max-width: 400px; width: 90%; }
+        
+        .modal-small { max-width: 350px; }
+        
+        .duracion-selector {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+        .duracion-btn {
+            flex: 1;
+            padding: 0.75rem;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-md);
+            color: var(--text-secondary);
+            cursor: pointer;
+            text-align: center;
+        }
+        .duracion-btn.selected {
+            background: var(--accent-white);
+            color: var(--bg-primary);
+            border-color: var(--accent-white);
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="container header-content">
+            <div>
+                <h1 style="font-family: var(--font-display); font-size: 1.25rem;">Panel de Control</h1>
+                <p style="font-size: 0.625rem; text-transform: uppercase; letter-spacing: 0.2em; color: var(--text-muted);" id="fecha-hoy">
+                    Cargando...
+                </p>
+            </div>
+            <div style="display: flex; gap: 0.75rem;">
+                <button class="btn btn-ghost" onclick="window.location.href='pagos.html'" style="position: relative;">
+                    <span class="material-symbols-outlined">payments</span>
+                    <span class="notification-dot hidden" id="notif-pagos"></span>
+                </button>
+                <button class="btn btn-ghost" onclick="logout()">
+                    <span class="material-symbols-outlined">logout</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="container" style="padding-top: 100px; padding-bottom: 100px;">
+        
+        <!-- Stats -->
+        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; margin-bottom: 2rem;">
+            <div class="stat-card">
+                <span class="stat-label">Citas Hoy</span>
+                <div class="stat-value" id="stat-hoy">0</div>
+            </div>
+            <div class="stat-card">
+                <span class="stat-label">Pendientes Pago</span>
+                <div class="stat-value" id="stat-pendientes" style="color: var(--accent-warning);">0</div>
+            </div>
+            <div class="stat-card">
+                <span class="stat-label">Ingresos Mes</span>
+                <div class="stat-value" id="stat-ingresos" style="font-size: 1.5rem;">$0</div>
+            </div>
+            <div class="stat-card">
+                <span class="stat-label">Clientes Nuevos</span>
+                <div class="stat-value" id="stat-nuevos">0</div>
+            </div>
+        </div>
+        
+        <!-- Acciones Rápidas -->
+        <h2 style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.2em; color: var(--text-muted); margin-bottom: 1rem;">Acciones Rápidas</h2>
+        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; margin-bottom: 2rem;">
+            <div class="quick-action" onclick="abrirModalBloqueo()">
+                <span class="material-symbols-outlined" style="color: var(--accent-danger);">block</span>
+                <div>
+                    <p style="font-weight: 600; font-size: 0.875rem;">Bloquear Días</p>
+                    <p style="font-size: 0.625rem; color: var(--text-muted);">Vacaciones o no disponible</p>
+                </div>
+            </div>
+            <div class="quick-action" onclick="window.location.href='citas.html'">
+                <span class="material-symbols-outlined">calendar_month</span>
+                <div>
+                    <p style="font-weight: 600; font-size: 0.875rem;">Ver Agenda</p>
+                    <p style="font-size: 0.625rem; color: var(--text-muted);">Todas las citas</p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Pagos Pendientes -->
+        <div id="pagos-pendientes-section" style="margin-top: 2rem; display: none;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                <h2 style="font-size: 1rem; font-weight: 600; color: var(--accent-warning);">
+                    <span class="material-symbols-outlined" style="vertical-align: middle; margin-right: 0.5rem;">schedule</span>
+                    Pagos por Confirmar
+                </h2>
+                <span class="badge badge-revision" id="count-pagos-pendientes">0</span>
+            </div>
+            <div id="pagos-pendientes-container"></div>
+        </div>
+        
+        <!-- Citas de Hoy (CON LAS NUEVAS OPCIONES) -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+            <h2 style="font-size: 1rem; font-weight: 600;">Citas de Hoy</h2>
+        </div>
+        <div id="citas-hoy-container">
+            <p style="text-align: center; color: var(--text-muted); padding: 2rem;">Cargando...</p>
+        </div>
+        
+        <!-- Sección de Bloqueos -->
+        <h2 style="font-size: 1rem; font-weight: 600; margin: 2rem 0 1rem;">Días Bloqueados</h2>
+        <div id="bloqueos-container"></div>
+        <button class="btn btn-secondary btn-block" onclick="abrirModalBloqueo()">
+            <span class="material-symbols-outlined">add</span> Nuevo Bloqueo
+        </button>
+        
+    </main>
+
+    <!-- Bottom Nav -->
+    <div class="bottom-nav">
+        <div class="bottom-nav-content">
+            <button class="nav-item active" onclick="window.location.href='panel.html'">
+                <span class="material-symbols-outlined">dashboard</span>
+                Panel
+            </button>
+            <button class="nav-item" onclick="window.location.href='citas.html'">
+                <span class="material-symbols-outlined">calendar_today</span>
+                Agenda
+            </button>
+            <button class="nav-fab" onclick="window.location.href='citas.html?action=nueva'">
+                <span class="material-symbols-outlined">add</span>
+            </button>
+            <button class="nav-item" onclick="window.location.href='../../index.html'">
+                <span class="material-symbols-outlined">storefront</span>
+                Web
+            </button>
+        </div>
+    </div>
+
+    <!-- Modal Nuevo Bloqueo (general) -->
+    <div id="modalBloqueo" class="modal">
+        <div class="modal-content">
+            <h3 style="margin-bottom: 1rem;">Bloquear Fecha</h3>
+            <div class="form-group">
+                <label class="form-label">Fecha</label>
+                <input type="date" id="bloqueoFecha" class="form-input" min="">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Motivo</label>
+                <input type="text" id="bloqueoMotivo" class="form-input" placeholder="Ej: Vacaciones">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Tipo</label>
+                <select id="bloqueoTipo" class="form-select">
+                    <option value="completo">Día completo</option>
+                    <option value="parcial">Horas específicas</option>
+                </select>
+            </div>
+            <div class="form-group" id="horasBloqueoContainer" style="display: none;">
+                <label class="form-label">Horas a bloquear (separadas por coma, ej: 09:00,10:00)</label>
+                <input type="text" id="bloqueoHoras" class="form-input" placeholder="09:00,10:00,11:00">
+            </div>
+            <div style="display: flex; gap: 1rem; justify-content: flex-end;">
+                <button class="btn btn-secondary" onclick="cerrarModalBloqueo()">Cancelar</button>
+                <button class="btn btn-primary" onclick="crearBloqueo()">Guardar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal para Reportar Inasistencia (con opción de bloqueo) -->
+    <div id="modalInasistencia" class="modal">
+        <div class="modal-content modal-small">
+            <h3 style="margin-bottom: 1rem;">Reportar Inasistencia</h3>
+            <p style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 1.5rem;" id="inasistencia-cliente-nombre"></p>
+            
+            <p style="font-size: 0.875rem; margin-bottom: 1rem;">¿Deseas bloquear al cliente?</p>
+            
+            <div style="display: flex; gap: 0.5rem; margin-bottom: 1.5rem;">
+                <button class="btn btn-secondary" style="flex: 1;" onclick="seleccionarBloqueoEnInasistencia(true)">
+                    Sí, bloquear
+                </button>
+                <button class="btn btn-primary" style="flex: 1;" onclick="reportarInasistenciaSinBloqueo()">
+                    No, solo reportar
+                </button>
+            </div>
+            
+            <div id="bloqueo-opciones" style="display: none;">
+                <div class="form-group">
+                    <label class="form-label">Tipo de bloqueo</label>
+                    <div class="duracion-selector">
+                        <div class="duracion-btn" onclick="seleccionarTipoBloqueo('horas')" id="tipo-horas">Horas</div>
+                        <div class="duracion-btn" onclick="seleccionarTipoBloqueo('dias')" id="tipo-dias">Días</div>
+                    </div>
+                </div>
+                
+                <div class="form-group" id="campo-horas" style="display: none;">
+                    <label class="form-label">¿Cuántas horas?</label>
+                    <input type="number" id="bloqueo-horas" class="form-input" min="1" max="72" value="24">
+                </div>
+                
+                <div class="form-group" id="campo-dias" style="display: none;">
+                    <label class="form-label">¿Cuántos días?</label>
+                    <input type="number" id="bloqueo-dias" class="form-input" min="1" max="30" value="7">
+                </div>
+                
+                <div style="display: flex; gap: 1rem; justify-content: flex-end;">
+                    <button class="btn btn-secondary" onclick="cerrarModalInasistencia()">Cancelar</button>
+                    <button class="btn btn-primary" onclick="confirmarInasistenciaConBloqueo()">Bloquear y reportar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentUser = null;
+        let citasListener = null;
+        let bloqueosListener = null;
+        let citaSeleccionada = null;
+        let tipoBloqueoSeleccionado = 'dias';
+        
+        firebase.auth().onAuthStateChanged(async (user) => {
+            if (!user) {
+                window.location.href = '../../index.html';
+                return;
+            }
+            
+            const adminDoc = await firebase.firestore().collection('admins').doc(user.uid).get();
+            if (!adminDoc.exists) {
+                alert('No tienes permisos de administrador');
+                await firebase.auth().signOut();
+                window.location.href = '../../index.html';
+                return;
+            }
+            
+            currentUser = user;
+            document.getElementById('fecha-hoy').textContent = 
+                new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' });
+            
+            iniciarListeners();
+        });
+        
+        function iniciarListeners() {
+            const hoy = new Date().toISOString().split('T')[0];
+            
+            // Escuchar TODAS las citas
+            citasListener = window.firestoreHelper.onCitasChange((citas) => {
+                // Citas de hoy
+                const citasHoy = citas.filter(c => c.fecha === hoy && c.estado !== 'cancelada' && c.estado !== 'completado');
+                actualizarCitasHoy(citasHoy);
+                
+                // Pagos pendientes
+                const pagosPendientes = citas.filter(c => c.estadoPago === 'en_revision');
+                actualizarPagosPendientes(pagosPendientes);
+                
+                // Actualizar contador
+                document.getElementById('stat-pendientes').textContent = pagosPendientes.length;
+                if (pagosPendientes.length > 0) {
+                    document.getElementById('notif-pagos').classList.remove('hidden');
+                } else {
+                    document.getElementById('notif-pagos').classList.add('hidden');
+                }
+            });
+            
+            // Escuchar todos los bloqueos
+            bloqueosListener = window.firestoreHelper.onBloqueosChange((bloqueos) => {
+                actualizarBloqueos(bloqueos);
+            });
+            
+            // Estadísticas generales
+            cargarEstadisticas();
+        }
+        
+        function actualizarCitasHoy(citas) {
+            document.getElementById('stat-hoy').textContent = citas.length;
+            
+            const container = document.getElementById('citas-hoy-container');
+            if (citas.length === 0) {
+                container.innerHTML = '<p style="text-align: center; color: var(--text-muted); padding: 2rem;">No hay citas para hoy</p>';
+                return;
+            }
+            
+            container.innerHTML = '';
+            citas.sort((a,b) => a.hora.localeCompare(b.hora));
+            
+            citas.forEach(cita => {
+                const card = document.createElement('div');
+                card.className = 'cita-card';
+                card.innerHTML = `
+                    <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.75rem;">
+                        <div style="display: flex; gap: 0.75rem;">
+                            <img src="${cita.clienteFoto || 'https://via.placeholder.com/40'}" 
+                                 style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover;">
+                            <div>
+                                <h4 style="font-weight: 600; font-size: 0.9375rem;">${cita.clienteNombre}</h4>
+                                <p style="font-size: 0.75rem; color: var(--text-muted);">${cita.servicio?.nombre || 'Corte'}</p>
+                            </div>
+                        </div>
+                        <span class="badge ${cita.estado === 'confirmado' ? 'badge-confirmado' : 'badge-pendiente'}">${cita.estado}</span>
+                    </div>
+                    <div style="display: flex; gap: 1rem; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 1rem;">
+                        <span style="display: flex; align-items: center; gap: 0.25rem;">
+                            <span class="material-symbols-outlined" style="font-size: 1rem;">schedule</span>
+                            ${cita.hora}
+                        </span>
+                        <span style="display: flex; align-items: center; gap: 0.25rem;">
+                            <span class="material-symbols-outlined" style="font-size: 1rem;">payments</span>
+                            ${cita.metodoPago === 'efectivo' ? 'Efectivo' : 'Nequi'}
+                        </span>
+                    </div>
+                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.5rem;">
+                        <button class="btn btn-success btn-sm" onclick="completarCita('${cita.id}')">
+                            <span class="material-symbols-outlined">check</span> Completar
+                        </button>
+                        <button class="btn btn-danger btn-sm" onclick="abrirModalInasistencia('${cita.id}', '${cita.clienteId}', '${cita.clienteNombre}')">
+                            <span class="material-symbols-outlined">block</span> Reportar inasistencia
+                        </button>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+        
+        // Funciones para Inasistencia y Bloqueo
+        function abrirModalInasistencia(citaId, clienteId, clienteNombre) {
+            citaSeleccionada = { id: citaId, clienteId, clienteNombre };
+            document.getElementById('inasistencia-cliente-nombre').textContent = clienteNombre;
+            document.getElementById('modalInasistencia').classList.add('active');
+            document.getElementById('bloqueo-opciones').style.display = 'none';
+            
+            // Resetear selección
+            tipoBloqueoSeleccionado = 'dias';
+            document.getElementById('tipo-horas').classList.remove('selected');
+            document.getElementById('tipo-dias').classList.add('selected');
+            document.getElementById('campo-horas').style.display = 'none';
+            document.getElementById('campo-dias').style.display = 'block';
+        }
+        
+        function seleccionarBloqueoEnInasistencia(bloquear) {
+            if (bloquear) {
+                document.getElementById('bloqueo-opciones').style.display = 'block';
+            } else {
+                reportarInasistenciaSinBloqueo();
+            }
+        }
+        
+        function seleccionarTipoBloqueo(tipo) {
+            tipoBloqueoSeleccionado = tipo;
+            
+            // Actualizar UI
+            document.getElementById('tipo-horas').classList.toggle('selected', tipo === 'horas');
+            document.getElementById('tipo-dias').classList.toggle('selected', tipo === 'dias');
+            
+            document.getElementById('campo-horas').style.display = tipo === 'horas' ? 'block' : 'none';
+            document.getElementById('campo-dias').style.display = tipo === 'dias' ? 'block' : 'none';
+        }
+        
+        async function reportarInasistenciaSinBloqueo() {
+            if (!citaSeleccionada) return;
+            
+            try {
+                // Marcar cita como inasistencia
+                await window.firestoreHelper.actualizarCita(citaSeleccionada.id, { 
+                    estado: 'inasistencia',
+                    reportadaEn: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                
+                // Actualizar cliente: incrementar contador de inasistencias
+                await firebase.firestore().collection('clientes').doc(citaSeleccionada.clienteId).update({
+                    inasistencias: firebase.firestore.FieldValue.increment(1),
+                    ultimaInasistencia: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                
+                alert('Inasistencia reportada');
+                cerrarModalInasistencia();
+                
+            } catch (error) {
+                console.error("Error:", error);
+                alert('Error al reportar');
+            }
+        }
+        
+        async function confirmarInasistenciaConBloqueo() {
+            if (!citaSeleccionada) return;
+            
+            let fechaBloqueoHasta;
+            const ahora = new Date();
+            
+            if (tipoBloqueoSeleccionado === 'horas') {
+                const horas = parseInt(document.getElementById('bloqueo-horas').value) || 24;
+                fechaBloqueoHasta = new Date(ahora.getTime() + horas * 60 * 60 * 1000);
+            } else {
+                const dias = parseInt(document.getElementById('bloqueo-dias').value) || 7;
+                fechaBloqueoHasta = new Date(ahora.getTime() + dias * 24 * 60 * 60 * 1000);
+            }
+            
+            try {
+                // Marcar cita como inasistencia
+                await window.firestoreHelper.actualizarCita(citaSeleccionada.id, { 
+                    estado: 'inasistencia',
+                    reportadaEn: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                
+                // Bloquear cliente
+                await firebase.firestore().collection('clientes').doc(citaSeleccionada.clienteId).update({
+                    estado: 'bloqueado',
+                    inasistencias: firebase.firestore.FieldValue.increment(1),
+                    bloqueoInicio: firebase.firestore.FieldValue.serverTimestamp(),
+                    bloqueoFin: fechaBloqueoHasta,
+                    bloqueoMotivo: 'inasistencia',
+                    bloqueadoPor: currentUser.uid,
+                    ultimaInasistencia: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                
+                alert(`Cliente bloqueado hasta ${fechaBloqueoHasta.toLocaleString()}`);
+                cerrarModalInasistencia();
+                
+            } catch (error) {
+                console.error("Error:", error);
+                alert('Error al procesar');
+            }
+        }
+        
+        function cerrarModalInasistencia() {
+            document.getElementById('modalInasistencia').classList.remove('active');
+            citaSeleccionada = null;
+        }
+        
+        // Función para completar cita (normal)
+        async function completarCita(id) {
+            if (!confirm('¿Marcar como completada?')) return;
+            
+            try {
+                // Obtener la cita para saber el cliente
+                const citaDoc = await firebase.firestore().collection('citas').doc(id).get();
+                const cita = citaDoc.data();
+                
+                await window.firestoreHelper.actualizarCita(id, { estado: 'completado' });
+                
+                // Actualizar cliente: incrementar cortes completados
+                await firebase.firestore().collection('clientes').doc(cita.clienteId).update({
+                    cortesCompletados: firebase.firestore.FieldValue.increment(1),
+                    ultimaVisita: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                
+            } catch (error) {
+                console.error("Error:", error);
+                alert('Error al completar');
+            }
+        }
+        
+        function actualizarPagosPendientes(pagos) {
+            const container = document.getElementById('pagos-pendientes-container');
+            const section = document.getElementById('pagos-pendientes-section');
+            
+            if (pagos.length === 0) {
+                section.style.display = 'none';
+                return;
+            }
+            
+            section.style.display = 'block';
+            document.getElementById('count-pagos-pendientes').textContent = pagos.length;
+            container.innerHTML = '';
+            
+            pagos.sort((a,b) => (a.fecha + a.hora).localeCompare(b.fecha + b.hora));
+            
+            pagos.forEach(cita => {
+                const card = document.createElement('div');
+                card.className = 'cita-card';
+                card.style.borderLeft = '3px solid var(--accent-warning)';
+                
+                card.innerHTML = `
+                    <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.75rem;">
+                        <div style="display: flex; gap: 0.75rem;">
+                            <img src="${cita.clienteFoto || 'https://via.placeholder.com/40'}" 
+                                 style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover;">
+                            <div>
+                                <h4 style="font-weight: 600; font-size: 0.9375rem;">${cita.clienteNombre}</h4>
+                                <p style="font-size: 0.75rem; color: var(--text-muted);">${cita.fecha} • ${cita.hora}</p>
+                            </div>
+                        </div>
+                        <span class="badge badge-revision">En revisión</span>
+                    </div>
+                    
+                    <div style="background: var(--bg-tertiary); padding: 0.75rem; border-radius: var(--radius-md); margin-bottom: 0.75rem;">
+                        <p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem;">Monto:</p>
+                        <p style="font-size: 1.125rem; font-weight: 700;">${window.firebaseApp?.formatCOP(cita.precioFinal) || '$25,000'}</p>
+                        ${cita.notaPago ? `<p style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.5rem;">"${cita.notaPago}"</p>` : ''}
+                    </div>
+                    
+                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem;">
+                        <button class="btn btn-success btn-sm" onclick="confirmarPago('${cita.id}', '${cita.clienteId}')">
+                            <span class="material-symbols-outlined">check</span> Confirmar
+                        </button>
+                        <button class="btn btn-info btn-sm" onclick="verComprobante('${cita.id}')">
+                            <span class="material-symbols-outlined">image</span> Ver
+                        </button>
+                        <button class="btn btn-danger btn-sm" onclick="rechazarPago('${cita.id}')">
+                            <span class="material-symbols-outlined">close</span> Rechazar
+                        </button>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+        
+        function actualizarBloqueos(bloqueos) {
+            const container = document.getElementById('bloqueos-container');
+            if (bloqueos.length === 0) {
+                container.innerHTML = '<p style="color: var(--text-muted); text-align: center;">No hay bloqueos</p>';
+                return;
+            }
+            
+            container.innerHTML = '';
+            bloqueos.sort((a,b) => a.fecha.localeCompare(b.fecha));
+            
+            bloqueos.forEach(bloqueo => {
+                const div = document.createElement('div');
+                div.className = 'bloqueo-item';
+                div.innerHTML = `
+                    <div>
+                        <strong>${new Date(bloqueo.fecha).toLocaleDateString()}</strong>
+                        <p style="font-size: 0.75rem; color: var(--text-muted);">${bloqueo.motivo} (${bloqueo.tipo})</p>
+                    </div>
+                    <button class="btn btn-danger btn-sm" onclick="eliminarBloqueo('${bloqueo.id}')">
+                        <span class="material-symbols-outlined">delete</span>
+                    </button>
+                `;
+                container.appendChild(div);
+            });
+        }
+        
+        async function cargarEstadisticas() {
+            try {
+                const inicioMes = new Date();
+                inicioMes.setDate(1);
+                inicioMes.setHours(0,0,0,0);
+                
+                const citasSnapshot = await firebase.firestore()
+                    .collection('citas')
+                    .where('fechaHora', '>=', inicioMes)
+                    .get();
+                
+                let total = 0;
+                citasSnapshot.forEach(doc => {
+                    const cita = doc.data();
+                    if (cita.estado === 'confirmado') {
+                        total += cita.precioFinal || 25000;
+                    }
+                });
+                
+                document.getElementById('stat-ingresos').textContent = window.firebaseApp?.formatCOP(total) || '$0';
+                
+                const clientesNuevos = await firebase.firestore()
+                    .collection('clientes')
+                    .where('fechaRegistro', '>=', inicioMes)
+                    .get();
+                document.getElementById('stat-nuevos').textContent = clientesNuevos.size;
+                
+            } catch (error) {
+                console.error("Error cargando estadísticas:", error);
+            }
+        }
+        
+        async function confirmarPago(citaId, clienteId) {
+            if (!confirm('¿Confirmas que recibiste el pago?')) return;
+            
+            try {
+                await window.firestoreHelper.actualizarCita(citaId, {
+                    estadoPago: 'confirmado',
+                    estado: 'confirmado',
+                    pagoConfirmadoEn: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                
+                // Incrementar cortes del cliente
+                await firebase.firestore().collection('clientes').doc(clienteId).update({
+                    cortesCompletados: firebase.firestore.FieldValue.increment(1)
+                });
+                
+                alert('Pago confirmado');
+            } catch (error) {
+                console.error("Error:", error);
+                alert('Error al confirmar pago');
+            }
+        }
+        
+        async function rechazarPago(citaId) {
+            const motivo = prompt('Motivo del rechazo:');
+            if (!motivo) return;
+            
+            try {
+                await window.firestoreHelper.actualizarCita(citaId, {
+                    estadoPago: 'rechazado',
+                    estado: 'cancelada',
+                    motivoRechazo: motivo
+                });
+                alert('Pago rechazado');
+            } catch (error) {
+                console.error("Error:", error);
+                alert('Error al rechazar pago');
+            }
+        }
+        
+        async function verComprobante(citaId) {
+            try {
+                const comprobante = await window.firestoreHelper.obtenerComprobante(citaId);
+                if (comprobante?.imagen) {
+                    const modal = document.createElement('div');
+                    modal.style.cssText = `
+                        position: fixed;
+                        top: 0;
+                        left: 0;
+                        right: 0;
+                        bottom: 0;
+                        background: rgba(0,0,0,0.9);
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        z-index: 10000;
+                        cursor: pointer;
+                    `;
+                    modal.innerHTML = `<img src="${comprobante.imagen}" style="max-width: 90%; max-height: 90%;">`;
+                    modal.onclick = () => modal.remove();
+                    document.body.appendChild(modal);
+                } else {
+                    alert('No hay comprobante para esta cita');
+                }
+            } catch (error) {
+                console.error("Error:", error);
+                alert('Error al cargar comprobante');
+            }
+        }
+        
+        // Gestión de bloqueos generales
+        function abrirModalBloqueo() {
+            document.getElementById('modalBloqueo').classList.add('active');
+            document.getElementById('bloqueoFecha').min = new Date().toISOString().split('T')[0];
+        }
+        
+        function cerrarModalBloqueo() {
+            document.getElementById('modalBloqueo').classList.remove('active');
+        }
+        
+        async function crearBloqueo() {
+            const fecha = document.getElementById('bloqueoFecha').value;
+            const motivo = document.getElementById('bloqueoMotivo').value;
+            const tipo = document.getElementById('bloqueoTipo').value;
+            
+            if (!fecha || !motivo) {
+                alert('Completa todos los campos');
+                return;
+            }
+            
+            const bloqueoData = {
+                fecha,
+                motivo,
+                tipo,
+                creadoPor: currentUser.uid
+            };
+            
+            if (tipo === 'parcial') {
+                const horas = document.getElementById('bloqueoHoras').value.split(',').map(h => h.trim());
+                bloqueoData.horas = horas;
+            }
+            
+            await window.firestoreHelper.crearBloqueo(bloqueoData);
+            cerrarModalBloqueo();
+            document.getElementById('bloqueoFecha').value = '';
+            document.getElementById('bloqueoMotivo').value = '';
+            document.getElementById('bloqueoHoras').value = '';
+        }
+        
+        async function eliminarBloqueo(id) {
+            if (!confirm('¿Eliminar este bloqueo?')) return;
+            await window.firestoreHelper.eliminarBloqueo(id);
+        }
+        
+        function logout() {
+            firebase.auth().signOut().then(() => {
+                window.location.href = '../../index.html';
+            });
+        }
+        
+        document.getElementById('bloqueoTipo').addEventListener('change', function() {
+            const container = document.getElementById('horasBloqueoContainer');
+            container.style.display = this.value === 'parcial' ? 'block' : 'none';
+        });
+    </script>
+</body>
+</html>
