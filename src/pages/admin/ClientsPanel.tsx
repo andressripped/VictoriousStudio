@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { db } from '../../config/firebase';
 import { collection, onSnapshot, doc, updateDoc } from 'firebase/firestore';
-import { MessageCircle, ShieldX, Check } from 'lucide-react';
+import { MessageCircle, ShieldX, Check, Download } from 'lucide-react';
 
 export default function ClientsPanel() {
   const [clientes, setClientes] = useState<any[]>([]);
@@ -62,11 +62,30 @@ export default function ClientsPanel() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-end">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
         <div>
           <h2 className="text-3xl font-display font-bold">Base de Datos de Clientes</h2>
           <p className="text-text-muted">Gestiona el historial, actividad y seguridad de tus clientes registrados.</p>
         </div>
+        <button
+          onClick={() => {
+            const header = 'Nombre,Apellido,Teléfono,Email,Citas Hechas,Citas Cumplidas,Ingresos,Strikes,Estado\n';
+            const rows = clientes.map(c => {
+              const stats = getClientStats(c.id);
+              return `"${c.nombre || ''}","${c.apellido || ''}","${c.telefono || ''}","${c.email || ''}",${stats.totalCitas},${stats.citasCumplidas},${stats.dineroGastado},${c.strikes || 0},${c.isBlocked ? 'Bloqueado' : 'Activo'}`;
+            }).join('\n');
+            const blob = new Blob([header + rows], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `clientes_victorious_${new Date().toISOString().split('T')[0]}.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
+          }}
+          className="flex items-center gap-2 px-4 py-2 bg-accent-primary text-bg-primary rounded-lg font-bold text-sm hover:opacity-90 transition-opacity shadow-md flex-shrink-0"
+        >
+          <Download size={16} /> Exportar CSV
+        </button>
       </div>
 
       <div className="bg-bg-card rounded-xl border border-border-strong overflow-hidden shadow-lg overflow-x-auto">

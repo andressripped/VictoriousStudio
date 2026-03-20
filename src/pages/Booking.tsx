@@ -117,8 +117,11 @@ export default function Booking() {
   }, [step, user, isStaff]);
 
   // ──── Booked slots (clears on date/barber change) ────
+  const [blockedSlots, setBlockedSlots] = useState<any[]>([]);
+
   useEffect(() => {
     setBookedSlots([]);
+    setBlockedSlots([]);
 
     if (step === 3 && selectedDate && selectedBarber) {
       const q = query(
@@ -131,7 +134,18 @@ export default function Booking() {
         const slots = snap.docs.map(d => ({ time: d.data().hora, duration: d.data().duracion }));
         setBookedSlots(slots);
       });
-      return () => unsub();
+
+      // Bloqueos manuales
+      const qBlocks = query(
+        collection(db, 'bloqueos'),
+        where('barberoId', '==', selectedBarber.id),
+        where('fecha', '==', selectedDate)
+      );
+      const unsubBlocks = onSnapshot(qBlocks, (snap) => {
+        setBlockedSlots(snap.docs.map(d => ({ time: d.data().hora, duration: d.data().duracion })));
+      });
+
+      return () => { unsub(); unsubBlocks(); };
     }
   }, [step, selectedDate, selectedBarber]);
 
@@ -166,7 +180,7 @@ export default function Booking() {
       const d = new Date(now);
       d.setDate(now.getDate() + i);
       const dateStr = getLocalDateString(d);
-      const isDayOff = d.getDay() === 0;
+      const isDayOff = d.getDay() === 0 || (selectedBarber?.diasTrabajo && !selectedBarber.diasTrabajo.includes(dayNames[d.getDay()]));
       days.push({
         dateStr,
         dayName: dayNames[d.getDay()],
@@ -197,13 +211,44 @@ export default function Booking() {
       const currentMinutes = now.getHours() * 60 + now.getMinutes();
       if (slotMinutes <= currentMinutes + 15) return false;
     }
+
+    // Verificar horario del barbero (mañana/tarde)
+    if (selectedBarber) {
+      const m = selectedBarber.horarioManana;
+      const t = selectedBarber.horarioTarde;
+      if (m || t) {
+        let withinSchedule = false;
+        if (m) {
+          const mS = parseInt(m.inicio.split(':')[0]) * 60 + parseInt(m.inicio.split(':')[1]);
+          const mE = parseInt(m.fin.split(':')[0]) * 60 + parseInt(m.fin.split(':')[1]);
+          if (slotMinutes >= mS && slotMinutes < mE) withinSchedule = true;
+        }
+        if (t) {
+          const tS = parseInt(t.inicio.split(':')[0]) * 60 + parseInt(t.inicio.split(':')[1]);
+          const tE = parseInt(t.fin.split(':')[0]) * 60 + parseInt(t.fin.split(':')[1]);
+          if (slotMinutes >= tS && slotMinutes < tE) withinSchedule = true;
+        }
+        if (!withinSchedule) return false;
+      }
+    }
+
     const serviceDur = selectedService?.duracion || 30;
     const slotEndMinutes = slotMinutes + serviceDur;
+
+    // Verificar contra reservas existentes
     for (const b of bookedSlots) {
       const bStartMinutes = parseInt(b.time.split(':')[0]) * 60 + parseInt(b.time.split(':')[1]);
       const bEndMinutes = bStartMinutes + (b.duration || 30);
       if (slotMinutes < bEndMinutes && slotEndMinutes > bStartMinutes) return false;
     }
+
+    // Verificar contra bloqueos manuales
+    for (const bl of blockedSlots) {
+      const blStart = parseInt(bl.time.split(':')[0]) * 60 + parseInt(bl.time.split(':')[1]);
+      const blEnd = blStart + (bl.duration || 60);
+      if (slotMinutes < blEnd && slotEndMinutes > blStart) return false;
+    }
+
     return true;
   };
 

@@ -137,7 +137,7 @@ function ServicesPanel() {
         const base64 = await compressAndConvertToBase64(e.target.files[0]);
         setImageBase64(base64);
       } catch (err) {
-        showToast("Error al comprimir la imagen.", 'error');
+        showToast("Error al procesar la imagen.", 'error');
       }
     }
   };
@@ -203,7 +203,7 @@ function ServicesPanel() {
       <div className="flex justify-between items-center mb-6">
         <div>
           <h2 className="text-3xl font-display mb-1">Servicios</h2>
-          <p className="text-text-muted text-sm">Añade o edita servicios. Las fotos se guardan a Costo 0.</p>
+          <p className="text-text-muted text-sm">Añade, edita y gestiona el portafolio de servicios visualizado por los clientes.</p>
         </div>
         {!showForm && (
           <button onClick={() => setShowForm(true)} className="flex items-center gap-2 bg-accent-primary text-bg-primary px-4 py-2 rounded font-medium">
@@ -312,10 +312,16 @@ function BarbersPanel() {
   const [emailAuth, setEmailAuth] = useState('');
   const [activo, setActivo] = useState(true);
   
-  // Pro Info
+  // Info
   const [biografia, setBiografia] = useState('');
   const [imageBase64, setImageBase64] = useState('');
   const [especialidades, setEspecialidades] = useState<string[]>([]);
+  
+  // Horarios
+  const DIAS_SEMANA = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+  const [diasTrabajo, setDiasTrabajo] = useState<string[]>(['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']);
+  const [horarioManana, setHorarioManana] = useState<{ inicio: string; fin: string } | null>({ inicio: '08:00', fin: '12:00' });
+  const [horarioTarde, setHorarioTarde] = useState<{ inicio: string; fin: string } | null>({ inicio: '14:00', fin: '20:00' });
   
   // UI State
   const [loading, setLoading] = useState(false);
@@ -337,6 +343,9 @@ function BarbersPanel() {
     setImageBase64('');
     setEspecialidades([]);
     setSearchEspecialidad('');
+    setDiasTrabajo(['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']);
+    setHorarioManana({ inicio: '08:00', fin: '12:00' });
+    setHorarioTarde({ inicio: '14:00', fin: '20:00' });
     setShowForm(false);
   };
 
@@ -348,6 +357,9 @@ function BarbersPanel() {
     setBiografia(b.biografia || '');
     setImageBase64(b.imageUrl || '');
     setEspecialidades(b.especialidades || []);
+    setDiasTrabajo(b.diasTrabajo || ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']);
+    setHorarioManana(b.horarioManana || null);
+    setHorarioTarde(b.horarioTarde || null);
     setShowForm(true);
   };
 
@@ -357,7 +369,7 @@ function BarbersPanel() {
         const base64 = await compressAndConvertToBase64(e.target.files[0]);
         setImageBase64(base64);
       } catch (err) {
-        alert("Error al comprimir la imagen.");
+        showToast("Error al procesar la imagen.", "error");
       }
     }
   };
@@ -378,7 +390,10 @@ function BarbersPanel() {
       activo,
       biografia,
       imageUrl: imageBase64,
-      especialidades
+      especialidades,
+      diasTrabajo,
+      horarioManana,
+      horarioTarde
     };
 
     try {
@@ -470,7 +485,7 @@ function BarbersPanel() {
                   <input required type="email" value={emailAuth} onChange={e => setEmailAuth(e.target.value)} className="w-full p-2 bg-bg-tertiary rounded border border-border-strong text-text-primary" disabled={!!editId} />
                </div>
                <div>
-                 <label className="block text-sm mb-1 text-text-muted">Foto de Perfil (Opcional, Costo $0)</label>
+                 <label className="block text-sm mb-1 text-text-muted">Foto de Perfil (Opcional)</label>
                  <input type="file" accept="image/*" onChange={handleImageUpload} className="w-full p-1 text-sm text-text-muted file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:bg-bg-tertiary file:text-accent-primary hover:file:bg-bg-secondary" />
                  {imageBase64 && (
                    <img src={imageBase64} alt="Avatar" className="w-16 h-16 mt-2 rounded-full object-cover border-2 border-accent-primary" />
@@ -520,7 +535,7 @@ function BarbersPanel() {
            <div className="flex justify-end gap-3 mt-4 pt-4 border-t border-border-subtle">
               <button type="button" onClick={resetForm} className="px-4 py-2 border border-border-strong rounded hover:bg-bg-tertiary">Cancelar</button>
               <button type="submit" disabled={loading} className="px-4 py-2 bg-accent-primary text-bg-primary rounded font-bold disabled:opacity-50">
-                {loading ? 'Procesando...' : editId ? 'Guardar Cambios' : 'Crear Perfil Pro'}
+                {loading ? 'Procesando...' : editId ? 'Guardar Cambios' : 'Crear Perfil'}
               </button>
            </div>
         </form>
@@ -579,6 +594,97 @@ function BarbersPanel() {
                 <button onClick={() => handleToggleActivo(b)} className={`flex-1 py-1.5 text-xs rounded transition-colors ${b.activo === false ? 'bg-accent-success text-bg-primary' : 'bg-bg-tertiary text-text-primary border border-border-strong hover:bg-bg-secondary'}`}>
                   {b.activo === false ? 'Habilitar Perfil' : 'Suspender'}
                 </button>
+              </div>
+            </div>
+
+            {/* Horarios y Días de Trabajo */}
+            <div className="md:col-span-2 border-t border-border-subtle pt-6">
+              <h3 className="font-bold border-b border-border-subtle pb-2 mb-4">Horarios y Días Laborales</h3>
+              
+              {/* Días de trabajo */}
+              <div className="mb-6">
+                <label className="block text-sm mb-2 text-text-muted">Días que trabaja</label>
+                <div className="flex flex-wrap gap-2">
+                  {DIAS_SEMANA.map(dia => (
+                    <button
+                      key={dia}
+                      type="button"
+                      onClick={() => setDiasTrabajo(prev => prev.includes(dia) ? prev.filter(d => d !== dia) : [...prev, dia])}
+                      className={`px-4 py-2 rounded-lg text-sm font-bold border transition-all ${
+                        diasTrabajo.includes(dia)
+                          ? 'bg-accent-primary/10 text-accent-primary border-accent-primary/30'
+                          : 'bg-bg-tertiary text-text-muted border-border-strong hover:border-text-muted'
+                      }`}
+                    >
+                      {dia}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Turnos */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Mañana */}
+                <div className={`p-4 rounded-xl border transition-all ${
+                  horarioManana ? 'border-accent-primary/30 bg-accent-primary/5' : 'border-border-strong bg-bg-tertiary opacity-60'
+                }`}>
+                  <div className="flex items-center justify-between mb-3">
+                    <label className="text-sm font-bold">Turno Mañana</label>
+                    <button
+                      type="button"
+                      onClick={() => setHorarioManana(prev => prev ? null : { inicio: '08:00', fin: '12:00' })}
+                      className={`text-xs px-3 py-1 rounded-full font-bold transition-all ${
+                        horarioManana ? 'bg-accent-primary text-bg-primary' : 'bg-bg-secondary text-text-muted border border-border-strong'
+                      }`}
+                    >
+                      {horarioManana ? 'Activo' : 'Desactivado'}
+                    </button>
+                  </div>
+                  {horarioManana && (
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1">
+                        <label className="text-[10px] text-text-muted uppercase tracking-wider">Desde</label>
+                        <input type="time" value={horarioManana.inicio} onChange={e => setHorarioManana({ ...horarioManana, inicio: e.target.value })} className="w-full p-2 bg-bg-tertiary rounded border border-border-strong text-text-primary text-sm" />
+                      </div>
+                      <span className="text-text-muted mt-4">→</span>
+                      <div className="flex-1">
+                        <label className="text-[10px] text-text-muted uppercase tracking-wider">Hasta</label>
+                        <input type="time" value={horarioManana.fin} onChange={e => setHorarioManana({ ...horarioManana, fin: e.target.value })} className="w-full p-2 bg-bg-tertiary rounded border border-border-strong text-text-primary text-sm" />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Tarde */}
+                <div className={`p-4 rounded-xl border transition-all ${
+                  horarioTarde ? 'border-accent-primary/30 bg-accent-primary/5' : 'border-border-strong bg-bg-tertiary opacity-60'
+                }`}>
+                  <div className="flex items-center justify-between mb-3">
+                    <label className="text-sm font-bold">Turno Tarde</label>
+                    <button
+                      type="button"
+                      onClick={() => setHorarioTarde(prev => prev ? null : { inicio: '14:00', fin: '20:00' })}
+                      className={`text-xs px-3 py-1 rounded-full font-bold transition-all ${
+                        horarioTarde ? 'bg-accent-primary text-bg-primary' : 'bg-bg-secondary text-text-muted border border-border-strong'
+                      }`}
+                    >
+                      {horarioTarde ? 'Activo' : 'Desactivado'}
+                    </button>
+                  </div>
+                  {horarioTarde && (
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1">
+                        <label className="text-[10px] text-text-muted uppercase tracking-wider">Desde</label>
+                        <input type="time" value={horarioTarde.inicio} onChange={e => setHorarioTarde({ ...horarioTarde, inicio: e.target.value })} className="w-full p-2 bg-bg-tertiary rounded border border-border-strong text-text-primary text-sm" />
+                      </div>
+                      <span className="text-text-muted mt-4">→</span>
+                      <div className="flex-1">
+                        <label className="text-[10px] text-text-muted uppercase tracking-wider">Hasta</label>
+                        <input type="time" value={horarioTarde.fin} onChange={e => setHorarioTarde({ ...horarioTarde, fin: e.target.value })} className="w-full p-2 bg-bg-tertiary rounded border border-border-strong text-text-primary text-sm" />
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>

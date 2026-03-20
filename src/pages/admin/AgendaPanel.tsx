@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useStore } from '../../store/useStore';
 import { db } from '../../config/firebase';
-import { collection, query, where, onSnapshot, doc, updateDoc, getDoc } from 'firebase/firestore';
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, CheckCircle, XCircle, AlertCircle, MessageCircle, X } from 'lucide-react';
+import { collection, query, where, onSnapshot, doc, updateDoc, getDoc, addDoc, deleteDoc } from 'firebase/firestore';
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, CheckCircle, XCircle, AlertCircle, MessageCircle, X, Ban } from 'lucide-react';
 
 // Math Constants for the Calendar Grid
 const START_HOUR = 8; // 8 AM
@@ -25,6 +25,12 @@ export default function AgendaPanel({ filterBarberId }: { filterBarberId?: strin
   const { showToast } = useStore();
   const [selectedReserva, setSelectedReserva] = useState<any | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const [bloqueos, setBloqueos] = useState<any[]>([]);
+  const [showBlockModal, setShowBlockModal] = useState(false);
+  const [blockBarberoId, setBlockBarberoId] = useState('');  
+  const [blockHora, setBlockHora] = useState('12:00');
+  const [blockDuracion, setBlockDuracion] = useState('60');
+  const [blockMotivo, setBlockMotivo] = useState('Almuerzo');
 
   // Escuchar barberos activos
   useEffect(() => {
@@ -55,6 +61,19 @@ export default function AgendaPanel({ filterBarberId }: { filterBarberId?: strin
       console.error("Error sincronizando agenda:", err);
     });
 
+    return () => unsub();
+  }, [selectedDate]);
+
+  // Sincronizar bloqueos del día
+  useEffect(() => {
+    const dateStr = getLocalDateString(selectedDate);
+    const q = query(
+      collection(db, 'bloqueos'),
+      where('fecha', '==', dateStr)
+    );
+    const unsub = onSnapshot(q, (snapshot) => {
+      setBloqueos(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
     return () => unsub();
   }, [selectedDate]);
 
@@ -110,6 +129,61 @@ export default function AgendaPanel({ filterBarberId }: { filterBarberId?: strin
       showToast("Error al intentar procesar la acción.", 'error');
     } finally {
       setActionLoading(false);
+    }
+  };
+
+  // Helper: ¿es una hora dentro del horario del barbero?
+  const isWithinSchedule = (barbero: any, hourMinute: number) => {
+    const m = barbero.horarioManana;
+    const t = barbero.horarioTarde;
+    let isIn = false;
+    if (m) {
+      const mStart = parseInt(m.inicio.split(':')[0]) * 60 + parseInt(m.inicio.split(':')[1]);
+      const mEnd = parseInt(m.fin.split(':')[0]) * 60 + parseInt(m.fin.split(':')[1]);
+      if (hourMinute >= mStart && hourMinute < mEnd) isIn = true;
+    }
+    if (t) {
+      const tStart = parseInt(t.inicio.split(':')[0]) * 60 + parseInt(t.inicio.split(':')[1]);
+      const tEnd = parseInt(t.fin.split(':')[0]) * 60 + parseInt(t.fin.split(':')[1]);
+      if (hourMinute >= tStart && hourMinute < tEnd) isIn = true;
+    }
+    // Si no tiene horarios configurados, asumimos que trabaja todo el día
+    if (!m && !t) isIn = true;
+    return isIn;
+  };
+
+  // Verifica si el día seleccionado es un día de trabajo del barbero
+  const isDayOff = (barbero: any) => {
+    if (!barbero.diasTrabajo) return false; // sin config = trabaja todos los días
+    const dayNames = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+    const dayName = dayNames[selectedDate.getDay()];
+    return !barbero.diasTrabajo.includes(dayName);
+  };
+
+  const handleAddBlock = async () => {
+    if (!blockBarberoId) {
+      showToast('Selecciona un barbero.', 'error');
+      return;
+    }
+    try {
+      await addDoc(collection(db, 'bloqueos'), {
+        barberoId: blockBarberoId,
+        fecha: getLocalDateString(selectedDate),
+        hora: blockHora,
+        duracion: Number(blockDuracion),
+        motivo: blockMotivo
+      });
+      showToast('Horario bloqueado exitosamente.', 'success');
+      setShowBlockModal(false);
+    } catch (err) {
+      showToast('Error al bloquear horario.', 'error');
+    }
+  };
+
+  const handleDeleteBlock = async (blockId: string) => {
+    if (confirm('¿Eliminar este bloqueo?')) {
+      await deleteDoc(doc(db, 'bloqueos', blockId));
+      showToast('Bloqueo eliminado.', 'success');
     }
   };
 
@@ -175,7 +249,13 @@ export default function AgendaPanel({ filterBarberId }: { filterBarberId?: strin
           </button>
         </div>
         
-        {/* loading indicator removed */}
+        {/* Botón Bloquear Horario */}
+        <button
+          onClick={() => { setShowBlockModal(true); if (barberos.length > 0) setBlockBarberoId(barberos[0].id); }}
+          className="flex items-center gap-2 px-3 py-2 bg-bg-card border border-border-strong rounded-lg text-xs font-bold text-text-muted hover:text-accent-primary hover:border-accent-primary/30 transition-all"
+        >
+          <Ban size={14} /> Bloquear Hora
+        </button>
       </div>
 
       {/* Agenda Body */}
@@ -211,9 +291,55 @@ export default function AgendaPanel({ filterBarberId }: { filterBarberId?: strin
             {barberos.map((b, bIdx) => {
               // Filtrar reservas que pertenezcan a este barbero
               const myBookings = reservas.filter(r => r.barberoId === b.id);
+              const myBlocks = bloqueos.filter(bl => bl.barberoId === b.id);
+              const barberDayOff = isDayOff(b);
 
               return (
                 <div key={b.id} className={`w-[300px] min-w-[300px] border-r border-border-subtle relative ${bIdx % 2 !== 0 ? 'bg-bg-tertiary/10' : ''}`}>
+                  {/* Renderizar zonas fuera de horario */}
+                  {!barberDayOff && (b.horarioManana || b.horarioTarde) && (() => {
+                    const zones: any[] = [];
+                    // Todas las horas y encontrar las franjas fuera de horario
+                    for (let h = START_HOUR; h < END_HOUR; h++) {
+                      for (let m = 0; m < 60; m += 30) {
+                        const minuteOfDay = h * 60 + m;
+                        if (!isWithinSchedule(b, minuteOfDay)) {
+                          const top = (minuteOfDay - START_HOUR * 60) * PIXELS_PER_MINUTE;
+                          zones.push(
+                            <div key={`off-${h}-${m}`} className="absolute w-full bg-bg-tertiary/40" style={{ top: `${top}px`, height: `${30 * PIXELS_PER_MINUTE}px` }} />
+                          );
+                        }
+                      }
+                    }
+                    return zones;
+                  })()}
+
+                  {/* Día libre completo */}
+                  {barberDayOff && (
+                    <div className="absolute inset-0 bg-bg-tertiary/50 flex items-center justify-center z-10">
+                      <span className="text-xs font-bold text-text-muted uppercase tracking-wider bg-bg-card px-3 py-1 rounded-full border border-border-strong">Día libre</span>
+                    </div>
+                  )}
+
+                  {/* Bloqueos manuales */}
+                  {myBlocks.map(bl => {
+                    const topPos = calculateTop(bl.hora);
+                    const blockHeight = (bl.duracion || 60) * PIXELS_PER_MINUTE;
+                    return (
+                      <div
+                        key={bl.id}
+                        className="absolute w-[calc(100%-10px)] left-[5px] rounded-md bg-red-500/10 border border-red-500/30 border-dashed overflow-hidden p-2 cursor-pointer hover:bg-red-500/20 transition-colors z-10"
+                        style={{ top: `${topPos}px`, height: `${blockHeight}px` }}
+                        onClick={() => handleDeleteBlock(bl.id)}
+                        title="Clic para eliminar bloqueo"
+                      >
+                        <div className="w-1 absolute left-0 top-0 bottom-0 bg-red-500"></div>
+                        <p className="text-xs font-bold text-red-500 truncate">{bl.motivo || 'Bloqueado'}</p>
+                        <p className="text-[10px] text-red-400">{bl.hora} • {bl.duracion} min</p>
+                      </div>
+                    );
+                  })}
+
                   {myBookings.map(res => {
                     const topPos = calculateTop(res.hora);
                     const dur = Number(res.duracion) || 30;
@@ -367,6 +493,55 @@ export default function AgendaPanel({ filterBarberId }: { filterBarberId?: strin
                   </button>
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* MODAL DE BLOQUEO */}
+        {showBlockModal && (
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-bg-tertiary border border-border-strong w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden">
+              <div className="p-6 border-b border-border-subtle flex justify-between items-center">
+                <h3 className="text-lg font-bold">Bloquear Horario</h3>
+                <button onClick={() => setShowBlockModal(false)} className="p-2 bg-bg-card hover:bg-bg-secondary rounded-full">
+                  <X size={20} />
+                </button>
+              </div>
+              <div className="p-6 space-y-4">
+                <div>
+                  <label className="text-sm text-text-muted block mb-1">Barbero</label>
+                  <select value={blockBarberoId} onChange={e => setBlockBarberoId(e.target.value)} className="w-full p-2 bg-bg-card rounded border border-border-strong text-text-primary">
+                    {barberos.map(b => <option key={b.id} value={b.id}>{b.nombre}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-sm text-text-muted block mb-1">Motivo</label>
+                  <select value={blockMotivo} onChange={e => setBlockMotivo(e.target.value)} className="w-full p-2 bg-bg-card rounded border border-border-strong text-text-primary">
+                    <option value="Almuerzo">Almuerzo</option>
+                    <option value="Descanso">Descanso</option>
+                    <option value="Cita personal">Cita personal</option>
+                    <option value="No disponible">No disponible</option>
+                  </select>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm text-text-muted block mb-1">Hora Inicio</label>
+                    <input type="time" value={blockHora} onChange={e => setBlockHora(e.target.value)} className="w-full p-2 bg-bg-card rounded border border-border-strong text-text-primary" />
+                  </div>
+                  <div>
+                    <label className="text-sm text-text-muted block mb-1">Duración (min)</label>
+                    <select value={blockDuracion} onChange={e => setBlockDuracion(e.target.value)} className="w-full p-2 bg-bg-card rounded border border-border-strong text-text-primary">
+                      <option value="30">30 min</option>
+                      <option value="60">1 hora</option>
+                      <option value="90">1.5 horas</option>
+                      <option value="120">2 horas</option>
+                    </select>
+                  </div>
+                </div>
+                <button onClick={handleAddBlock} className="w-full py-3 bg-accent-primary text-bg-primary rounded-xl font-bold hover:opacity-90 transition-opacity">
+                  Confirmar Bloqueo
+                </button>
+              </div>
             </div>
           </div>
         )}
