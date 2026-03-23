@@ -1,22 +1,30 @@
 import { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { db } from '../config/firebase';
-import { collection, onSnapshot, addDoc, query, where, doc, getDoc, setDoc } from 'firebase/firestore';
-import { Calendar, User, Scissors, CheckCircle, ChevronLeft, ShieldAlert, Users, CalendarDays, Sparkles, UserCog } from 'lucide-react';
+import { collection, onSnapshot, addDoc, query, where, doc, getDoc, setDoc, getDocs } from 'firebase/firestore';
+import { Calendar, User, Scissors, CheckCircle, ChevronLeft, ShieldAlert, Users, CalendarDays, Sparkles, UserCog, Ban } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import ValidatedInput from '../components/ui/ValidatedInput';
 import PrimaryButton from '../components/ui/PrimaryButton';
 import { validateName, validatePhone } from '../utils/validators';
+import { isBarberDayOff, isSlotWithinBarberSchedule, overlapsExistingSlot } from '../utils/scheduling';
 
-// Genera slots de 30 en 30 min desde las 9 AM hasta las 8 PM
+// Genera slots de 30 en 30 min desde las 8 AM hasta las 8 PM
 const generateTimeSlots = () => {
-  const slots: string[] = [];
-  for (let i = 9; i <= 19; i++) {
-    slots.push(`${i.toString().padStart(2, '0')}:00`);
-    slots.push(`${i.toString().padStart(2, '0')}:30`);
+  const slots: { value: string; label: string }[] = [];
+  for (let h = 8; h <= 19; h++) {
+    for (const m of ['00', '30']) {
+      const value = `${h.toString().padStart(2, '0')}:${m}`;
+      const h12 = h > 12 ? h - 12 : h === 0 ? 12 : h;
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      const label = `${h12}:${m} ${ampm}`;
+      slots.push({ value, label });
+    }
   }
   return slots;
 };
+
+const ALL_TIME_SLOTS = generateTimeSlots();
 
 // Helper para obtener YYYY-MM-DD en hora local real
 const getLocalDateString = (d: Date) => {
@@ -30,27 +38,52 @@ export default function Booking() {
   const location = useLocation();
   const preSelectedService = (location.state as any)?.selectedService || null;
 
-  const [step, setStep] = useState(preSelectedService ? 2 : 1);
+  // 1. Estados de Datos (Firestore)
   const [servicios, setServicios] = useState<any[]>([]);
   const [barberos, setBarberos] = useState<any[]>([]);
 
-  // Auth & Client Profile State
+  // 2. Auth & UI State
   const { user, userRole, setLoginModalOpen, showToast } = useStore();
   const [clientProfile, setClientProfile] = useState<any>(null);
   const [checkingProfile, setCheckingProfile] = useState(false);
-
-  // Is this user a staff member (admin or barber)?
   const isStaff = userRole === 'superadmin' || userRole === 'barber';
 
-  // Selección
-  const [selectedService, setSelectedService] = useState<any | null>(preSelectedService);
-  const [selectedBarber, setSelectedBarber] = useState<any | null>(null);
-  const [selectedDate, setSelectedDate] = useState<string>('');
+  // 3. Selección con Persistencia
+  const [step, setStep] = useState(() => {
+    const savedStep = sessionStorage.getItem('booking_step');
+    if (preSelectedService) return 2;
+    return savedStep ? parseInt(savedStep) : 1;
+  });
+
+  const [selectedServiceId, setSelectedServiceId] = useState<string | null>(() => {
+    return sessionStorage.getItem('booking_service_id') || preSelectedService?.id || null;
+  });
+  const [selectedBarberId, setSelectedBarberId] = useState<string | null>(() => {
+    return sessionStorage.getItem('booking_barber_id') || null;
+  });
+
+  const [selectedDate, setSelectedDate] = useState<string>(() => sessionStorage.getItem('booking_date') || '');
   const [selectedTime, setSelectedTime] = useState<string>('');
 
-  // UI & Data
+  useEffect(() => {
+    sessionStorage.setItem('booking_step', step.toString());
+    if (selectedServiceId) sessionStorage.setItem('booking_service_id', selectedServiceId);
+    else sessionStorage.removeItem('booking_service_id');
+
+    if (selectedBarberId) sessionStorage.setItem('booking_barber_id', selectedBarberId);
+    else sessionStorage.removeItem('booking_barber_id');
+
+    if (selectedDate) sessionStorage.setItem('booking_date', selectedDate);
+    else sessionStorage.removeItem('booking_date');
+  }, [step, selectedServiceId, selectedBarberId, selectedDate]);
+
+  // 4. Datos Derivados
+  const selectedService = servicios.find(s => s.id === selectedServiceId) || preSelectedService;
+  const selectedBarber = barberos.find(b => b.id === selectedBarberId);
+
+  // 5. Resto de estados auxiliares
   const [loading, setLoading] = useState(false);
-  const [bookedSlots, setBookedSlots] = useState<{time: string, duration: number}[]>([]);
+  const [bookedSlots, setBookedSlots] = useState<{ time: string, duration: number }[]>([]);
   const [allBookingsByDate, setAllBookingsByDate] = useState<Record<string, number>>({});
   const [isSuccess, setIsSuccess] = useState(false);
 
@@ -68,6 +101,15 @@ export default function Booking() {
     });
     return () => { unsubServicios(); unsubBarberos(); };
   }, []);
+
+  useEffect(() => {
+    if (!selectedBarberId || barberos.length === 0 || selectedBarber) return;
+
+    setSelectedBarberId(null);
+    setSelectedDate('');
+    setSelectedTime('');
+    if (step > 2) setStep(2);
+  }, [barberos, selectedBarber, selectedBarberId, step]);
 
   // ──── Fetch Client Profile ────
   useEffect(() => {
@@ -127,12 +169,19 @@ export default function Booking() {
       const q = query(
         collection(db, 'reservas'),
         where('barberoId', '==', selectedBarber.id),
-        where('fecha', '==', selectedDate),
-        where('estado', 'not-in', ['cancelada'])
+        where('fecha', '==', selectedDate)
       );
       const unsub = onSnapshot(q, (snap) => {
-        const slots = snap.docs.map(d => ({ time: d.data().hora, duration: d.data().duracion }));
+        // Filtrar estados no deseados en memoria para evitar requerir índices compuestos complejos
+        const slots = snap.docs
+          .map(d => d.data())
+          .filter(d => !['cancelada'].includes(d.estado))
+          .map(d => ({ time: d.hora, duration: d.duracion }));
+        
         setBookedSlots(slots);
+      }, (err) => {
+        console.error("Error al cargar reservas:", err);
+        showToast("Error al cargar disponibilidad real.", "error");
       });
 
       // Bloqueos manuales
@@ -143,6 +192,8 @@ export default function Booking() {
       );
       const unsubBlocks = onSnapshot(qBlocks, (snap) => {
         setBlockedSlots(snap.docs.map(d => ({ time: d.data().hora, duration: d.data().duracion })));
+      }, (err) => {
+        console.error("Error al cargar bloqueos:", err);
       });
 
       return () => { unsub(); unsubBlocks(); };
@@ -162,6 +213,8 @@ export default function Booking() {
     return () => unsub();
   }, []);
 
+  const checkIsDayOff = (date: Date) => isBarberDayOff(selectedBarber, date);
+
   const getDayStatus = (dateStr: string, isDayOff: boolean) => {
     if (isDayOff) return 'off';
     if (barberos.length === 0) return 'high';
@@ -180,7 +233,7 @@ export default function Booking() {
       const d = new Date(now);
       d.setDate(now.getDate() + i);
       const dateStr = getLocalDateString(d);
-      const isDayOff = d.getDay() === 0 || (selectedBarber?.diasTrabajo && !selectedBarber.diasTrabajo.includes(dayNames[d.getDay()]));
+      const isDayOff = checkIsDayOff(d);
       days.push({
         dateStr,
         dayName: dayNames[d.getDay()],
@@ -204,52 +257,39 @@ export default function Booking() {
   };
 
   const isSlotAvailable = (slotTime: string) => {
+    if (!selectedBarber || !selectedDate) return { available: false, reason: 'loading' };
+
+    // 1. Validar si el día es no laboral para el barbero
+    const d = new Date(selectedDate + 'T00:00:00');
+    if (checkIsDayOff(d)) return { available: false, reason: 'day-off' };
+
     const slotMinutes = parseInt(slotTime.split(':')[0]) * 60 + parseInt(slotTime.split(':')[1]);
     const todayStr = getLocalDateString(new Date());
+
+    // Si es hoy, no permitir citas en el pasado o muy próximas
     if (selectedDate === todayStr) {
       const now = new Date();
       const currentMinutes = now.getHours() * 60 + now.getMinutes();
-      if (slotMinutes <= currentMinutes + 15) return false;
+      if (slotMinutes <= currentMinutes + 15) return { available: false, reason: 'past' };
     }
 
-    // Verificar horario del barbero (mañana/tarde)
-    if (selectedBarber) {
-      const m = selectedBarber.horarioManana;
-      const t = selectedBarber.horarioTarde;
-      if (m || t) {
-        let withinSchedule = false;
-        if (m) {
-          const mS = parseInt(m.inicio.split(':')[0]) * 60 + parseInt(m.inicio.split(':')[1]);
-          const mE = parseInt(m.fin.split(':')[0]) * 60 + parseInt(m.fin.split(':')[1]);
-          if (slotMinutes >= mS && slotMinutes < mE) withinSchedule = true;
-        }
-        if (t) {
-          const tS = parseInt(t.inicio.split(':')[0]) * 60 + parseInt(t.inicio.split(':')[1]);
-          const tE = parseInt(t.fin.split(':')[0]) * 60 + parseInt(t.fin.split(':')[1]);
-          if (slotMinutes >= tS && slotMinutes < tE) withinSchedule = true;
-        }
-        if (!withinSchedule) return false;
-      }
-    }
-
+    // 2. Verificar horario del barbero (mañana/tarde)
     const serviceDur = selectedService?.duracion || 30;
-    const slotEndMinutes = slotMinutes + serviceDur;
-
-    // Verificar contra reservas existentes
-    for (const b of bookedSlots) {
-      const bStartMinutes = parseInt(b.time.split(':')[0]) * 60 + parseInt(b.time.split(':')[1]);
-      const bEndMinutes = bStartMinutes + (b.duration || 30);
-      if (slotMinutes < bEndMinutes && slotEndMinutes > bStartMinutes) return false;
+    if (!isSlotWithinBarberSchedule(selectedBarber, slotTime, serviceDur)) {
+      return { available: false, reason: 'outside-shift' };
     }
 
-    // Verificar contra bloqueos manuales
-    for (const bl of blockedSlots) {
-      const blStart = parseInt(bl.time.split(':')[0]) * 60 + parseInt(bl.time.split(':')[1]);
-      const blEnd = blStart + (bl.duration || 60);
-      if (slotMinutes < blEnd && slotEndMinutes > blStart) return false;
+    // 3. Verificar contra reservas existentes
+    if (overlapsExistingSlot(slotTime, serviceDur, bookedSlots)) {
+      return { available: false, reason: 'booked' };
     }
 
-    return true;
+    // 4. Verificar contra bloqueos manuales
+    if (overlapsExistingSlot(slotTime, serviceDur, blockedSlots)) {
+      return { available: false, reason: 'blocked' };
+    }
+
+    return { available: true };
   };
 
   // ──── Require Login before Step 3 ────
@@ -281,6 +321,11 @@ export default function Booking() {
     }
     if (!user) { setLoginModalOpen(true); return; }
 
+    if (!selectedService || !selectedBarber || !selectedDate || !selectedTime) {
+      showToast('Completa servicio, barbero, fecha y hora antes de confirmar.', 'error');
+      return;
+    }
+
     // Staff uses form fields (booking for a client)
     // Regular clients: use profile data if complete, otherwise form fields
     const nombre = isStaff ? clienteNombre : (clientProfile?.nombre || clienteNombre);
@@ -298,6 +343,61 @@ export default function Booking() {
 
     setLoading(true);
     try {
+      const bookingDate = new Date(`${selectedDate}T00:00:00`);
+      if (isBarberDayOff(selectedBarber, bookingDate)) {
+        showToast('Este barbero no trabaja en la fecha seleccionada.', 'error');
+        setStep(3);
+        return;
+      }
+
+      if (!isSlotWithinBarberSchedule(selectedBarber, selectedTime, selectedService.duracion || 30)) {
+        showToast('La hora seleccionada ya no está dentro del horario laboral del barbero.', 'error');
+        setSelectedTime('');
+        setStep(3);
+        return;
+      }
+
+      const reservationQuery = query(
+        collection(db, 'reservas'),
+        where('barberoId', '==', selectedBarber.id),
+        where('fecha', '==', selectedDate),
+      );
+      const blockQuery = query(
+        collection(db, 'bloqueos'),
+        where('barberoId', '==', selectedBarber.id),
+        where('fecha', '==', selectedDate),
+      );
+
+      const [reservationSnapshot, blockSnapshot] = await Promise.all([
+        getDocs(reservationQuery),
+        getDocs(blockQuery),
+      ]);
+
+      const freshBookedSlots = reservationSnapshot.docs
+        .map((snapshot) => snapshot.data())
+        .filter((reservation) => !['cancelada'].includes(reservation.estado))
+        .map((reservation) => ({ time: reservation.hora, duration: reservation.duracion }));
+
+      const freshBlockedSlots = blockSnapshot.docs.map((snapshot) => ({
+        time: snapshot.data().hora,
+        duration: snapshot.data().duracion,
+      }));
+
+      const serviceDuration = selectedService.duracion || 30;
+      if (overlapsExistingSlot(selectedTime, serviceDuration, freshBookedSlots)) {
+        showToast('Ese horario acaba de ser reservado. Elige otro.', 'error');
+        setSelectedTime('');
+        setStep(3);
+        return;
+      }
+
+      if (overlapsExistingSlot(selectedTime, serviceDuration, freshBlockedSlots)) {
+        showToast('Ese horario fue bloqueado. Elige otro.', 'error');
+        setSelectedTime('');
+        setStep(3);
+        return;
+      }
+
       // Only create/update client doc for non-staff users
       if (!isStaff) {
         const clientDocRef = doc(db, 'clientes', user.uid);
@@ -311,8 +411,8 @@ export default function Booking() {
       }
 
       await addDoc(collection(db, 'reservas'), {
-        clienteId: isStaff ? 'manual' : user.uid,
-        clienteNombre: `${nombre} ${apellido}`,
+        clienteId: isStaff ? null : user.uid,
+        clienteNombre: `${nombre} ${apellido}`.trim(),
         clienteTelefono: telefono,
         servicioId: selectedService.id,
         servicioNombre: selectedService.nombre,
@@ -320,12 +420,16 @@ export default function Booking() {
         barberoNombre: selectedBarber.nombre,
         fecha: selectedDate,
         hora: selectedTime,
-        duracion: selectedService.duracion,
-        precio: selectedService.precio,
+        duracion: serviceDuration,
+        precio: selectedService.precio || 0,
         estado: 'pendiente',
         creadoPor: userRole || 'user',
         createdAt: new Date().toISOString()
       });
+      sessionStorage.removeItem('booking_step');
+      sessionStorage.removeItem('booking_service_id');
+      sessionStorage.removeItem('booking_barber_id');
+      sessionStorage.removeItem('booking_date');
       setIsSuccess(true);
       showToast('¡Cita agendada!', 'success');
     } catch (err) {
@@ -356,8 +460,6 @@ export default function Booking() {
     );
   }
 
-  const allTimeSlots = generateTimeSlots();
-
   return (
     <div className="container mx-auto py-12 px-4 max-w-5xl">
       <div className="mb-12">
@@ -379,8 +481,15 @@ export default function Booking() {
               {servicios.map((s) => (
                 <button
                   key={s.id}
-                  onClick={() => { setSelectedService(s); setStep(2); }}
-                  className="group bg-bg-card rounded-xl border border-border-strong hover:border-accent-primary transition-all text-left shadow-sm hover:shadow-xl relative overflow-hidden flex flex-col sm:flex-row h-auto sm:h-44 w-full max-w-lg"
+                  onClick={() => {
+                    setSelectedServiceId(s.id);
+                    setSelectedBarberId(null);
+                    setSelectedDate('');
+                    setSelectedTime('');
+                    setStep(2);
+                  }}
+                  className={`group bg-bg-card rounded-xl border transition-all text-left shadow-sm hover:shadow-xl relative overflow-hidden flex flex-col sm:flex-row h-auto sm:h-44 w-full max-w-lg ${selectedServiceId === s.id ? 'border-accent-primary ring-2 ring-accent-primary/20' : 'border-border-strong hover:border-accent-primary'
+                    }`}
                   aria-label={`Seleccionar servicio ${s.nombre}, precio $${s.precio}`}
                 >
                   {s.imageUrl ? (
@@ -433,8 +542,14 @@ export default function Booking() {
               {getBarbersForService().map((b) => (
                 <button
                   key={b.id}
-                  onClick={() => { setSelectedBarber(b); goToStep(3); }}
-                  className="group bg-bg-card p-6 rounded-xl border border-border-strong hover:border-accent-primary transition-all text-center shadow-sm hover:shadow-xl flex flex-col items-center"
+                  onClick={() => {
+                    setSelectedBarberId(b.id);
+                    setSelectedDate('');
+                    setSelectedTime('');
+                    goToStep(3);
+                  }}
+                  className={`group bg-bg-card p-6 rounded-xl border transition-all text-center shadow-sm hover:shadow-xl flex flex-col items-center ${selectedBarberId === b.id ? 'border-accent-primary ring-2 ring-accent-primary/20' : 'border-border-strong hover:border-accent-primary'
+                    }`}
                   aria-label={`Seleccionar barbero ${b.nombre}`}
                 >
                   <div className="w-24 h-24 rounded-full border-4 border-bg-tertiary group-hover:border-accent-primary overflow-hidden mb-4 transition-all group-hover:scale-105">
@@ -476,16 +591,18 @@ export default function Booking() {
                   <button
                     key={i}
                     disabled={d.status === 'full' || d.status === 'off'}
-                    onClick={() => { setSelectedDate(d.dateStr); setSelectedTime(''); }}
+                    onClick={() => {
+                      setSelectedDate(d.dateStr);
+                      setSelectedTime('');
+                    }}
                     role="option"
                     aria-selected={selectedDate === d.dateStr}
-                    className={`min-w-[80px] p-3 rounded-xl border flex flex-col items-center justify-center transition-all ${
-                      selectedDate === d.dateStr
+                    className={`min-w-[80px] p-3 rounded-xl border flex flex-col items-center justify-center transition-all ${selectedDate === d.dateStr
                         ? 'border-accent-primary bg-accent-primary text-bg-primary shadow-lg scale-105'
                         : d.status === 'full' || d.status === 'off'
                           ? 'border-border-subtle bg-bg-tertiary text-text-muted opacity-30 cursor-not-allowed'
                           : 'border-border-strong bg-bg-card hover:border-accent-primary shadow-sm'
-                    }`}
+                      }`}
                   >
                     <span className="text-[10px] uppercase font-bold mb-1 opacity-80">{d.dayName}</span>
                     <span className="text-2xl font-display font-bold mb-2">{d.dayNum}</span>
@@ -496,29 +613,110 @@ export default function Booking() {
             </div>
 
             {selectedDate && (
-              <div className="animate-fade-in">
-                <p className="text-xs font-bold uppercase tracking-widest text-text-muted mb-4">Horarios disponibles</p>
-                <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-3">
-                  {allTimeSlots.map((time) => {
-                    const available = isSlotAvailable(time);
-                    return (
-                      <button
-                        key={time}
-                        disabled={!available}
-                        onClick={() => { setSelectedTime(time); goToStep(4); }}
-                        className={`py-3 rounded-xl text-xs font-bold transition-all border ${
-                          selectedTime === time
-                            ? 'bg-accent-primary border-accent-primary text-bg-primary shadow-lg scale-110'
-                            : available
-                              ? 'bg-bg-tertiary border-border-strong text-text-primary hover:border-accent-primary'
-                              : 'bg-bg-card border-border-subtle text-text-muted opacity-10 cursor-not-allowed'
-                        }`}
-                      >
-                        {time}
-                      </button>
-                    );
-                  })}
+              <div className="animate-fade-in space-y-8">
+                {/* Leyenda */}
+                <div className="flex flex-wrap gap-4 text-[10px] uppercase font-bold tracking-widest text-text-muted px-2">
+                  <div className="flex items-center gap-2"><div className="w-3 h-3 rounded bg-accent-primary"></div> Disponible</div>
                 </div>
+
+                {/* Bloque Mañana */}
+                {(() => {
+                  const slots = ALL_TIME_SLOTS.filter(s => parseInt(s.value.split(':')[0]) < 13)
+                    .map(s => ({ ...s, status: isSlotAvailable(s.value) }));
+                  const available = slots.filter(s => s.status.available);
+
+                  if (slots.length === 0 || available.length === 0) {
+                    return (
+                      <div className="bg-bg-card p-6 rounded-2xl border border-dashed border-border-subtle shadow-sm animate-scale-in text-center">
+                        <Ban size={40} className="mx-auto text-text-muted mb-4 opacity-20" />
+                        <p className="text-text-muted font-bold">No hay agenda disponible en el turno de la mañana.</p>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="bg-bg-card p-6 rounded-2xl border border-border-subtle shadow-sm animate-scale-in">
+                      <p className="flex items-center justify-between text-sm font-bold uppercase tracking-widest text-text-muted mb-4 pb-2 border-b border-border-subtle">
+                        <span className="flex items-center gap-2">
+                          <Sparkles size={14} className="text-accent-primary" /> Turno Mañana
+                        </span>
+                        <span className="text-[10px] font-normal opacity-60">{available.length} disponibles</span>
+                      </p>
+                      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-7 gap-3">
+                        {available.map((slot) => (
+                          <button
+                            key={slot.value}
+                            onClick={() => { setSelectedTime(slot.value); goToStep(4); }}
+                            className={`py-3 rounded-xl text-xs font-bold transition-all border ${
+                              selectedTime === slot.value
+                                ? 'bg-accent-primary border-accent-primary text-bg-primary shadow-lg scale-105'
+                                : 'bg-bg-tertiary border-border-strong text-text-primary hover:border-accent-primary hover:bg-bg-secondary active:scale-95'
+                            }`}
+                          >
+                            {slot.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Bloque Tarde */}
+                {(() => {
+                  const slots = ALL_TIME_SLOTS.filter(s => parseInt(s.value.split(':')[0]) >= 13)
+                    .map(s => ({ ...s, status: isSlotAvailable(s.value) }));
+                  const available = slots.filter(s => s.status.available);
+
+                  if (slots.length === 0 || available.length === 0) {
+                    return (
+                      <div className="bg-bg-card p-6 rounded-2xl border border-dashed border-border-subtle shadow-sm animate-scale-in text-center">
+                        <Ban size={40} className="mx-auto text-text-muted mb-4 opacity-20" />
+                        <p className="text-text-muted font-bold">No hay agenda disponible en el turno de la tarde.</p>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="bg-bg-card p-6 rounded-2xl border border-border-subtle shadow-sm animate-scale-in">
+                      <p className="flex items-center justify-between text-sm font-bold uppercase tracking-widest text-text-muted mb-4 pb-2 border-b border-border-subtle">
+                        <span className="flex items-center gap-2">
+                          <Sparkles size={14} className="text-accent-primary" /> Turno Tarde
+                        </span>
+                        <span className="text-[10px] font-normal opacity-60">{available.length} disponibles</span>
+                      </p>
+                      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-7 gap-3">
+                        {available.map((slot) => (
+                          <button
+                            key={slot.value}
+                            onClick={() => { setSelectedTime(slot.value); goToStep(4); }}
+                            className={`py-3 rounded-xl text-xs font-bold transition-all border ${
+                              selectedTime === slot.value
+                                ? 'bg-accent-primary border-accent-primary text-bg-primary shadow-lg scale-105'
+                                : 'bg-bg-tertiary border-border-strong text-text-primary hover:border-accent-primary hover:bg-bg-secondary active:scale-95'
+                            }`}
+                          >
+                            {slot.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Empty State si no hay absoluta disponibilidad */}
+                {(() => {
+                  const anyAvailable = ALL_TIME_SLOTS.some(s => isSlotAvailable(s.value).available);
+                  if (!anyAvailable) {
+                    return (
+                      <div className="text-center py-12 px-6 bg-bg-card rounded-2xl border border-dashed border-border-subtle">
+                        <Ban size={48} className="mx-auto text-text-muted mb-4 opacity-20" />
+                        <p className="text-text-muted font-bold">No hay agenda disponible para este día.</p>
+                        <p className="text-xs text-text-muted/60 mt-1">Por favor, selecciona otra fecha o barbero.</p>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
               </div>
             )}
           </div>

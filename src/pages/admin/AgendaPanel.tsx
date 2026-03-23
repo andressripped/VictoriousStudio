@@ -2,14 +2,24 @@ import { useState, useEffect } from 'react';
 import { useStore } from '../../store/useStore';
 import { db } from '../../config/firebase';
 import { collection, query, where, onSnapshot, doc, updateDoc, getDoc, addDoc, deleteDoc } from 'firebase/firestore';
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, CheckCircle, XCircle, AlertCircle, MessageCircle, X, Ban } from 'lucide-react';
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, CheckCircle, XCircle, AlertCircle, MessageCircle, X, Ban, Clock } from 'lucide-react';
+import { isBarberDayOff, isSlotWithinBarberSchedule, parseTimeToMinutes } from '../../utils/scheduling';
 
 // Math Constants for the Calendar Grid
 const START_HOUR = 8; // 8 AM
 const END_HOUR = 20; // 8 PM
 const TOTAL_HOURS = END_HOUR - START_HOUR;
-const PIXELS_PER_MINUTE = 2; // 1 Hora = 120px de altura
-const HOUR_HEIGHT = 60 * PIXELS_PER_MINUTE;
+const HOUR_HEIGHT = 80;
+const PIXELS_PER_MINUTE = HOUR_HEIGHT / 60;
+
+// Helper para convertir HH:mm (24h) a 12h (AM/PM)
+const format12h = (time24: string) => {
+  if (!time24) return '';
+  const [h, m] = time24.split(':').map(Number);
+  const hour12 = h > 12 ? h - 12 : h === 0 ? 12 : h;
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  return `${hour12}:${m.toString().padStart(2, '0')} ${ampm}`;
+};
 
 const getLocalDateString = (d: Date) => {
   const year = d.getFullYear();
@@ -95,7 +105,7 @@ export default function AgendaPanel({ filterBarberId }: { filterBarberId?: strin
 
     try {
       const resId = selectedReserva.id;
-      const clientUid = selectedReserva.clienteUid;
+      const clientUid = selectedReserva.clienteId;
 
       // Actualizar estado de la reserva
       await updateDoc(doc(db, 'reservas', resId), { estado: action });
@@ -133,38 +143,35 @@ export default function AgendaPanel({ filterBarberId }: { filterBarberId?: strin
   };
 
   // Helper: ¿es una hora dentro del horario del barbero?
-  const isWithinSchedule = (barbero: any, hourMinute: number) => {
-    const m = barbero.horarioManana;
-    const t = barbero.horarioTarde;
-    let isIn = false;
-    if (m) {
-      const mStart = parseInt(m.inicio.split(':')[0]) * 60 + parseInt(m.inicio.split(':')[1]);
-      const mEnd = parseInt(m.fin.split(':')[0]) * 60 + parseInt(m.fin.split(':')[1]);
-      if (hourMinute >= mStart && hourMinute < mEnd) isIn = true;
-    }
-    if (t) {
-      const tStart = parseInt(t.inicio.split(':')[0]) * 60 + parseInt(t.inicio.split(':')[1]);
-      const tEnd = parseInt(t.fin.split(':')[0]) * 60 + parseInt(t.fin.split(':')[1]);
-      if (hourMinute >= tStart && hourMinute < tEnd) isIn = true;
-    }
-    // Si no tiene horarios configurados, asumimos que trabaja todo el día
-    if (!m && !t) isIn = true;
-    return isIn;
+  const isWithinSchedule = (barber: any, hourMinute: number) => {
+    const slotHour = Math.floor(hourMinute / 60).toString().padStart(2, '0');
+    const slotMinute = (hourMinute % 60).toString().padStart(2, '0');
+    return isSlotWithinBarberSchedule(barber, `${slotHour}:${slotMinute}`, 30);
   };
 
   // Verifica si el día seleccionado es un día de trabajo del barbero
-  const isDayOff = (barbero: any) => {
-    if (!barbero.diasTrabajo) return false; // sin config = trabaja todos los días
-    const dayNames = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
-    const dayName = dayNames[selectedDate.getDay()];
-    return !barbero.diasTrabajo.includes(dayName);
-  };
+  const isDayOff = (barber: any) => isBarberDayOff(barber, selectedDate);
 
   const handleAddBlock = async () => {
     if (!blockBarberoId) {
       showToast('Selecciona un barbero.', 'error');
       return;
     }
+
+    // Validar que la hora esté dentro del horario laboral del barbero
+    const barbero = barberos.find(b => b.id === blockBarberoId);
+    if (barbero) {
+      if (isDayOff(barbero)) {
+        showToast('Este barbero no trabaja hoy. No es necesario bloquear.', 'error');
+        return;
+      }
+      const blockMinutes = parseTimeToMinutes(blockHora);
+      if ((barbero.horarioManana || barbero.horarioTarde) && !isWithinSchedule(barbero, blockMinutes)) {
+        showToast('Esa hora ya está fuera del horario laboral del barbero.', 'error');
+        return;
+      }
+    }
+
     try {
       await addDoc(collection(db, 'bloqueos'), {
         barberoId: blockBarberoId,
@@ -175,8 +182,9 @@ export default function AgendaPanel({ filterBarberId }: { filterBarberId?: strin
       });
       showToast('Horario bloqueado exitosamente.', 'success');
       setShowBlockModal(false);
-    } catch (err) {
-      showToast('Error al bloquear horario.', 'error');
+    } catch (err: any) {
+      console.error('Error bloqueo:', err);
+      showToast('Error al bloquear: ' + (err.message || 'Desconocido'), 'error');
     }
   };
 
@@ -198,13 +206,15 @@ export default function AgendaPanel({ filterBarberId }: { filterBarberId?: strin
   const renderTimeLabels = () => {
     const labels = [];
     for (let i = START_HOUR; i <= END_HOUR; i++) {
+      const h12 = i > 12 ? i - 12 : i === 0 ? 12 : i;
+      const ampm = i >= 12 ? 'PM' : 'AM';
       labels.push(
         <div 
           key={i} 
-          className="relative text-xs text-text-muted font-medium w-16 text-right pr-4 border-r border-border-strong bg-bg-card z-10"
+          className="relative text-[10px] text-text-muted font-bold w-16 text-right pr-4 border-r border-border-strong bg-bg-card z-10"
           style={{ height: `${HOUR_HEIGHT}px` }}
         >
-          <span className="relative -top-2">{i}:00</span>
+          <span className="relative -top-2">{h12}:00 {ampm}</span>
         </div>
       );
     }
@@ -335,7 +345,7 @@ export default function AgendaPanel({ filterBarberId }: { filterBarberId?: strin
                       >
                         <div className="w-1 absolute left-0 top-0 bottom-0 bg-red-500"></div>
                         <p className="text-xs font-bold text-red-500 truncate">{bl.motivo || 'Bloqueado'}</p>
-                        <p className="text-[10px] text-red-400">{bl.hora} • {bl.duracion} min</p>
+                        <p className="text-[10px] text-red-400">{format12h(bl.hora)} • {bl.duracion} min</p>
                       </div>
                     );
                   })}
@@ -376,7 +386,7 @@ export default function AgendaPanel({ filterBarberId }: { filterBarberId?: strin
                            {blockHeight >= 40 && (
                              <>
                                <p className="text-[10px] text-text-muted truncate">{res.servicioNombre}</p>
-                               <p className="text-[10px] text-accent-primary font-bold">{res.hora} • {dur} min</p>
+                               <p className="text-[10px] text-accent-primary font-bold">{format12h(res.hora)} • {dur} min</p>
                              </>
                            )}
                            
@@ -384,7 +394,7 @@ export default function AgendaPanel({ filterBarberId }: { filterBarberId?: strin
                            <div className="hidden group-hover:block absolute z-50 top-0 left-full ml-2 w-48 bg-bg-card border border-border-strong rounded-lg shadow-2xl p-3">
                              <p className="font-bold border-b border-border-subtle pb-1 mb-2">{res.clienteNombre}</p>
                              <p className="text-xs text-text-muted mb-1">Servicio: <strong className="text-text-primary">{res.servicioNombre}</strong></p>
-                             <p className="text-xs text-text-muted mb-1">Hora: <strong className="text-text-primary">{res.hora} ({dur}m)</strong></p>
+                             <p className="text-xs text-text-muted mb-1">Hora: <strong className="text-text-primary">{format12h(res.hora)} ({dur}m)</strong></p>
                              <p className="text-xs text-text-muted mb-1">WhatsApp: <strong className="text-text-primary">{res.clienteTelefono}</strong></p>
                              <span className="inline-block mt-2 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-bg-tertiary text-text-primary border border-border-strong">
                                {res.estado.toUpperCase()}
@@ -451,14 +461,14 @@ export default function AgendaPanel({ filterBarberId }: { filterBarberId?: strin
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-bg-card p-4 rounded-xl border border-border-subtle">
-                    <p className="text-sm text-text-muted mb-1">Fecha</p>
-                    <p className="font-bold">{selectedReserva.fecha}</p>
+                <div className="flex items-center gap-4 text-sm">
+                  <div className="p-2 bg-bg-tertiary rounded-lg flex items-center gap-2">
+                    <CalendarIcon size={16} className="text-accent-primary" />
+                    <span>{getLocalDateString(selectedDate)}</span>
                   </div>
-                  <div className="bg-bg-card p-4 rounded-xl border border-border-subtle">
-                    <p className="text-sm text-text-muted mb-1">Hora</p>
-                    <p className="font-bold">{selectedReserva.hora}</p>
+                  <div className="p-2 bg-bg-tertiary rounded-lg flex items-center gap-2">
+                    <Clock size={16} className="text-accent-primary" />
+                    <span>{format12h(selectedReserva.hora)}</span>
                   </div>
                 </div>
               </div>

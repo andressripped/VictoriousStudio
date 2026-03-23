@@ -380,9 +380,29 @@ function BarbersPanel() {
     );
   };
 
+  const hasValidShift = (shift: { inicio: string; fin: string } | null) => {
+    if (!shift) return false;
+    return Boolean(shift.inicio && shift.fin && shift.inicio < shift.fin);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+
+    const morningEnabled = hasValidShift(horarioManana);
+    const afternoonEnabled = hasValidShift(horarioTarde);
+
+    if (!morningEnabled && !afternoonEnabled) {
+      showToast('Configura al menos un turno válido para este barbero.', 'error');
+      setLoading(false);
+      return;
+    }
+
+    if (diasTrabajo.length === 0) {
+      showToast('Selecciona al menos un día laboral.', 'error');
+      setLoading(false);
+      return;
+    }
 
     const barberData = {
       nombre,
@@ -392,8 +412,8 @@ function BarbersPanel() {
       imageUrl: imageBase64,
       especialidades,
       diasTrabajo,
-      horarioManana,
-      horarioTarde
+      horarioManana: morningEnabled ? horarioManana : null,
+      horarioTarde: afternoonEnabled ? horarioTarde : null
     };
 
     try {
@@ -415,7 +435,7 @@ function BarbersPanel() {
 
         await signOut(secondaryAuth);
         await setDoc(doc(db, 'roles', newUid), { role: 'barber' });
-        await addDoc(collection(db, 'barberos'), barberData);
+        await setDoc(doc(db, 'barberos', newUid), barberData);
 
         showToast(`Barbero ${nombre} creado exitosamente.`, 'success');
       }
@@ -531,71 +551,6 @@ function BarbersPanel() {
                </div>
              </div>
            </div>
-           
-           <div className="flex justify-end gap-3 mt-4 pt-4 border-t border-border-subtle">
-              <button type="button" onClick={resetForm} className="px-4 py-2 border border-border-strong rounded hover:bg-bg-tertiary">Cancelar</button>
-              <button type="submit" disabled={loading} className="px-4 py-2 bg-accent-primary text-bg-primary rounded font-bold disabled:opacity-50">
-                {loading ? 'Procesando...' : editId ? 'Guardar Cambios' : 'Crear Perfil'}
-              </button>
-           </div>
-        </form>
-      )}
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 w-full">
-        {barberos.map(b => (
-          <div key={b.id} className="bg-bg-card p-4 md:p-6 rounded-xl border border-border-strong relative overflow-hidden flex flex-col sm:flex-row gap-6 hover:shadow-lg transition-shadow">
-            
-            <div className="absolute top-3 right-3 flex gap-2">
-              <button onClick={() => handleEdit(b)} className="p-2 bg-bg-tertiary hover:bg-bg-secondary rounded-full" title="Editar"><Edit2 size={16} /></button>
-              <button onClick={() => handleDelete(b.id)} className="p-2 bg-bg-tertiary hover:bg-accent-error hover:text-white rounded-full text-accent-error"><Trash2 size={16} /></button>
-            </div>
-
-            {/* Fila Izquierda: Imagen y Bio */}
-            <div className="flex flex-col items-center min-w-[120px] pt-4 sm:pt-0">
-              {b.imageUrl ? (
-                <img src={b.imageUrl} className={`w-24 h-24 min-w-[96px] flex-shrink-0 rounded-full object-cover border-4 mb-3 shadow-inner ${b.activo === false ? 'border-bg-tertiary grayscale' : 'border-accent-primary/20'}`} />
-              ) : (
-                <div className="w-24 h-24 min-w-[96px] flex-shrink-0 rounded-full border-4 border-bg-tertiary flex items-center justify-center font-display text-4xl text-text-muted mb-3 bg-bg-secondary">
-                  {b.nombre.charAt(0).toUpperCase()}
-                </div>
-              )}
-              <span className={`text-[10px] uppercase font-bold px-3 py-1 rounded-full ${b.activo === false ? 'bg-bg-tertiary text-text-muted' : 'bg-accent-success/20 text-accent-success'}`}>
-                {b.activo === false ? 'Inactivo' : 'Disponible'}
-              </span>
-            </div>
-
-            {/* Fila Derecha: Info y Especialidades */}
-            <div className="flex flex-col flex-1">
-              <h4 className="font-bold text-2xl pr-12 leading-tight">{b.nombre}</h4>
-              <p className="text-xs text-text-muted mb-2 font-mono">{b.emailAuth}</p>
-              
-              {b.biografia && (
-                <p className="text-sm text-text-secondary mb-3 line-clamp-2 italic border-l-2 border-border-strong pl-2">"{b.biografia}"</p>
-              )}
-
-              <div className="mb-4">
-                <span className="text-xs font-bold text-text-muted uppercase tracking-wider block mb-1">Especialista en:</span>
-                <div className="flex flex-wrap gap-1">
-                  {b.especialidades?.length > 0 ? (
-                    b.especialidades.map((e: string, i: number) => (
-                      <span key={i} className="text-xs bg-bg-tertiary text-text-primary px-2 py-1 rounded-sm border border-border-subtle">{e}</span>
-                    ))
-                  ) : (
-                    <span className="text-xs text-text-muted italic">Sin especialidades registradas</span>
-                  )}
-                </div>
-              </div>
-
-              {/* Botoneras Inferiores */}
-              <div className="mt-auto flex gap-2 border-t border-border-subtle pt-3">
-                <button onClick={() => handleResetPassword(b.emailAuth)} className="flex-1 py-1.5 text-xs text-text-muted hover:text-accent-primary hover:bg-bg-tertiary rounded transition-colors text-center border border-transparent hover:border-border-subtle">
-                  🔑 Reset Auth
-                </button>
-                <button onClick={() => handleToggleActivo(b)} className={`flex-1 py-1.5 text-xs rounded transition-colors ${b.activo === false ? 'bg-accent-success text-bg-primary' : 'bg-bg-tertiary text-text-primary border border-border-strong hover:bg-bg-secondary'}`}>
-                  {b.activo === false ? 'Habilitar Perfil' : 'Suspender'}
-                </button>
-              </div>
-            </div>
 
             {/* Horarios y Días de Trabajo */}
             <div className="md:col-span-2 border-t border-border-subtle pt-6">
@@ -687,6 +642,81 @@ function BarbersPanel() {
                 </div>
               </div>
             </div>
+           
+           <div className="flex justify-end gap-3 mt-4 pt-4 border-t border-border-subtle">
+              <button type="button" onClick={resetForm} className="px-4 py-2 border border-border-strong rounded hover:bg-bg-tertiary">Cancelar</button>
+              <button type="submit" disabled={loading} className="px-4 py-2 bg-accent-primary text-bg-primary rounded font-bold disabled:opacity-50">
+                {loading ? 'Procesando...' : editId ? 'Guardar Cambios' : 'Crear Perfil'}
+              </button>
+           </div>
+        </form>
+      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 w-full">
+        {barberos.map(b => (
+          <div key={b.id} className="bg-bg-card p-5 rounded-xl border border-border-strong relative overflow-hidden hover:shadow-lg transition-shadow">
+            
+            {/* Header: Foto + Info básica */}
+            <div className="flex items-center gap-4 mb-4">
+              {b.imageUrl ? (
+                <img src={b.imageUrl} className={`w-14 h-14 min-w-[56px] flex-shrink-0 rounded-full object-cover border-2 shadow-inner ${b.activo === false ? 'border-bg-tertiary grayscale' : 'border-accent-primary/30'}`} />
+              ) : (
+                <div className="w-14 h-14 min-w-[56px] flex-shrink-0 rounded-full border-2 border-bg-tertiary flex items-center justify-center font-display text-2xl text-text-muted bg-bg-secondary">
+                  {b.nombre.charAt(0).toUpperCase()}
+                </div>
+              )}
+              <div className="flex-1 min-w-0">
+                <h4 className="font-bold text-lg leading-tight truncate">{b.nombre}</h4>
+                <p className="text-xs text-text-muted font-mono truncate">{b.emailAuth}</p>
+              </div>
+              <span className={`text-[10px] uppercase font-bold px-3 py-1 rounded-full flex-shrink-0 ${b.activo === false ? 'bg-bg-tertiary text-text-muted' : 'bg-accent-success/20 text-accent-success'}`}>
+                {b.activo === false ? 'Inactivo' : 'Activo'}
+              </span>
+            </div>
+
+            {/* Info rápida: Días y Horario */}
+            <div className="flex flex-wrap items-center gap-2 mb-4">
+              {(b.diasTrabajo || ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']).map((d: string) => (
+                <span key={d} className="text-[10px] font-bold bg-accent-primary/10 text-accent-primary px-2 py-0.5 rounded">{d}</span>
+              ))}
+              {b.horarioManana && (
+                <span className="text-[10px] text-text-muted ml-1">☀ {b.horarioManana.inicio}-{b.horarioManana.fin}</span>
+              )}
+              {b.horarioTarde && (
+                <span className="text-[10px] text-text-muted">🌙 {b.horarioTarde.inicio}-{b.horarioTarde.fin}</span>
+              )}
+              {!b.horarioManana && !b.horarioTarde && (
+                <span className="text-[10px] text-text-muted italic">Sin horario configurado</span>
+              )}
+            </div>
+
+            {/* Especialidades como tags pequeños */}
+            {b.especialidades?.length > 0 && (
+              <div className="flex flex-wrap gap-1 mb-4">
+                {b.especialidades.slice(0, 3).map((e: string, i: number) => (
+                  <span key={i} className="text-[10px] bg-bg-tertiary text-text-muted px-2 py-0.5 rounded border border-border-subtle">{e}</span>
+                ))}
+                {b.especialidades.length > 3 && (
+                  <span className="text-[10px] text-accent-primary font-bold">+{b.especialidades.length - 3} más</span>
+                )}
+              </div>
+            )}
+
+            {/* Acciones */}
+            <div className="flex gap-2 border-t border-border-subtle pt-3">
+              <button onClick={() => handleEdit(b)} className="flex-1 py-1.5 text-xs font-bold bg-accent-primary/10 text-accent-primary hover:bg-accent-primary/20 rounded transition-colors text-center">
+                Editar
+              </button>
+              <button onClick={() => handleResetPassword(b.emailAuth)} className="flex-1 py-1.5 text-xs text-text-muted hover:text-accent-primary hover:bg-bg-tertiary rounded transition-colors text-center border border-transparent hover:border-border-subtle">
+                🔑 Reset
+              </button>
+              <button onClick={() => handleToggleActivo(b)} className={`flex-1 py-1.5 text-xs rounded transition-colors ${b.activo === false ? 'bg-accent-success text-bg-primary' : 'bg-bg-tertiary text-text-primary border border-border-strong hover:bg-bg-secondary'}`}>
+                {b.activo === false ? 'Habilitar' : 'Suspender'}
+              </button>
+              <button onClick={() => handleDelete(b.id)} className="py-1.5 px-3 text-xs text-accent-error hover:bg-accent-error/10 rounded transition-colors">
+                <Trash2 size={14} />
+              </button>
+            </div>
           </div>
         ))}
         {barberos.length === 0 && (
@@ -698,5 +728,4 @@ function BarbersPanel() {
     </div>
   );
 }
-
 

@@ -1,0 +1,165 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function rolePath(uid) {
+      return /databases/$(database)/documents/roles/$(uid);
+    }
+
+    function getRole(uid) {
+      return signedIn() && exists(rolePath(uid))
+        ? get(rolePath(uid)).data.role
+        : null;
+    }
+
+    function hasRole(role) {
+      return getRole(request.auth.uid) == role;
+    }
+
+    function isStaff() {
+      return hasRole('superadmin') || hasRole('barber');
+    }
+
+    function isOwner(userId) {
+      return signedIn() && request.auth.uid == userId;
+    }
+
+    function onlyChanged(keys) {
+      return request.resource.data.diff(resource.data).changedKeys().hasOnly(keys);
+    }
+
+    function validTime(value) {
+      return value is string && value.matches('^([01][0-9]|2[0-3]):[0-5][0-9]$');
+    }
+
+    function validDay(day) {
+      return day in ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+    }
+
+    function validBarberSchedule(data) {
+      return
+        data.nombre is string &&
+        data.emailAuth is string &&
+        data.activo is bool &&
+        data.especialidades is list &&
+        data.diasTrabajo is list &&
+        data.diasTrabajo.size() > 0 &&
+        data.diasTrabajo.all(day, validDay(day)) &&
+        (
+          !('horarioManana' in data) ||
+          data.horarioManana == null ||
+          (
+            data.horarioManana is map &&
+            validTime(data.horarioManana.inicio) &&
+            validTime(data.horarioManana.fin)
+          )
+        ) &&
+        (
+          !('horarioTarde' in data) ||
+          data.horarioTarde == null ||
+          (
+            data.horarioTarde is map &&
+            validTime(data.horarioTarde.inicio) &&
+            validTime(data.horarioTarde.fin)
+          )
+        );
+    }
+
+    function validReservation(data) {
+      return
+        data.clienteId is string &&
+        data.clienteNombre is string &&
+        data.clienteTelefono is string &&
+        data.servicioId is string &&
+        data.servicioNombre is string &&
+        data.barberoId is string &&
+        data.barberoNombre is string &&
+        data.fecha is string &&
+        data.hora is string &&
+        data.duracion is number &&
+        data.precio is number &&
+        data.estado == 'pendiente' &&
+        data.creadoPor is string;
+    }
+
+    function validClientCreate(data) {
+      return
+        data.nombre is string &&
+        data.apellido is string &&
+        data.telefono is string &&
+        data.email is string &&
+        data.strikes is number &&
+        data.isBlocked is bool;
+    }
+
+    function validBlock(data) {
+      return
+        data.barberoId is string &&
+        data.fecha is string &&
+        validTime(data.hora) &&
+        data.duracion is number &&
+        data.motivo is string;
+    }
+
+    match /servicios/{docId} {
+      allow read: if true;
+      allow create, update, delete: if hasRole('superadmin');
+    }
+
+    match /barberos/{docId} {
+      allow read: if true;
+      allow create, update, delete: if hasRole('superadmin') && validBarberSchedule(request.resource.data);
+    }
+
+    match /roles/{userId} {
+      allow read: if isOwner(userId) || hasRole('superadmin');
+      allow create, update, delete: if hasRole('superadmin');
+    }
+
+    match /clientes/{userId} {
+      allow read: if isOwner(userId) || isStaff();
+      allow create: if isOwner(userId) && validClientCreate(request.resource.data);
+      allow update: if
+        (
+          isOwner(userId) &&
+          onlyChanged(['nombre', 'apellido', 'telefono']) &&
+          request.resource.data.nombre is string &&
+          request.resource.data.apellido is string &&
+          request.resource.data.telefono is string
+        )
+        || (
+          isStaff() &&
+          request.resource.data.keys().hasOnly(['nombre', 'apellido', 'telefono', 'email', 'strikes', 'isBlocked', 'createdAt']) &&
+          request.resource.data.nombre is string &&
+          request.resource.data.apellido is string &&
+          request.resource.data.telefono is string &&
+          request.resource.data.email is string &&
+          request.resource.data.strikes is number &&
+          request.resource.data.isBlocked is bool
+        );
+      allow delete: if hasRole('superadmin');
+    }
+
+    match /reservas/{docId} {
+      allow read: if isStaff() || (signedIn() && resource.data.clienteId == request.auth.uid);
+      allow create: if signedIn() && validReservation(request.resource.data) && (
+        request.resource.data.clienteId == request.auth.uid || isStaff()
+      );
+      allow update: if
+        isStaff() &&
+        request.resource.data.diff(resource.data).changedKeys().hasOnly(['estado']) &&
+        request.resource.data.estado in ['pendiente', 'completada', 'cancelada', 'no-show'];
+      allow delete: if hasRole('superadmin');
+    }
+
+    match /bloqueos/{docId} {
+      allow read: if isStaff();
+      allow create, delete: if isStaff() && validBlock(request.resource.data);
+      allow update: if false;
+    }
+  }
+}

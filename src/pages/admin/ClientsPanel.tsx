@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { db } from '../../config/firebase';
 import { collection, onSnapshot, doc, updateDoc } from 'firebase/firestore';
 import { MessageCircle, ShieldX, Check, Download } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 export default function ClientsPanel() {
   const [clientes, setClientes] = useState<any[]>([]);
@@ -57,6 +58,29 @@ export default function ClientsPanel() {
     return { totalCitas, citasCumplidas, dineroGastado };
   };
 
+  const handleExportExcel = () => {
+    const data = clientes.map(c => {
+      const stats = getClientStats(c.id);
+      return {
+        'Nombre': c.nombre || '',
+        'Apellido': c.apellido || '',
+        'Teléfono': c.telefono || '',
+        'Email': c.email || '',
+        'Citas Hechas': stats.totalCitas,
+        'Citas Cumplidas': stats.citasCumplidas,
+        'Ingresos ($)': stats.dineroGastado,
+        'Strikes': c.strikes || 0,
+        'Estado': c.isBlocked ? 'Bloqueado' : 'Activo'
+      };
+    });
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Clientes');
+    // Auto-ajustar anchos de columna
+    ws['!cols'] = Object.keys(data[0] || {}).map(() => ({ wch: 18 }));
+    XLSX.writeFile(wb, `clientes_victorious_${new Date().toISOString().split('T')[0]}.xlsx`);
+  };
+
   // Ensure both collections are loaded before showing the UI
   if (loadingClientes || loadingReservas) return <div className="p-10 text-center animate-pulse">Cargando datos del CRM...</div>;
 
@@ -68,23 +92,10 @@ export default function ClientsPanel() {
           <p className="text-text-muted">Gestiona el historial, actividad y seguridad de tus clientes registrados.</p>
         </div>
         <button
-          onClick={() => {
-            const header = 'Nombre,Apellido,Teléfono,Email,Citas Hechas,Citas Cumplidas,Ingresos,Strikes,Estado\n';
-            const rows = clientes.map(c => {
-              const stats = getClientStats(c.id);
-              return `"${c.nombre || ''}","${c.apellido || ''}","${c.telefono || ''}","${c.email || ''}",${stats.totalCitas},${stats.citasCumplidas},${stats.dineroGastado},${c.strikes || 0},${c.isBlocked ? 'Bloqueado' : 'Activo'}`;
-            }).join('\n');
-            const blob = new Blob([header + rows], { type: 'text/csv;charset=utf-8;' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `clientes_victorious_${new Date().toISOString().split('T')[0]}.csv`;
-            a.click();
-            URL.revokeObjectURL(url);
-          }}
+          onClick={handleExportExcel}
           className="flex items-center gap-2 px-4 py-2 bg-accent-primary text-bg-primary rounded-lg font-bold text-sm hover:opacity-90 transition-opacity shadow-md flex-shrink-0"
         >
-          <Download size={16} /> Exportar CSV
+          <Download size={16} /> Exportar Excel
         </button>
       </div>
 
